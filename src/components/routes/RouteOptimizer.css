@@ -1,0 +1,66 @@
+.route-optimizer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.route-controls {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  margin-bottom: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+}
+
+.filter-group label {
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.control-select,
+.control-date {
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.generate-button {
+  margin-left: auto;
+  padding: 0.5rem 1rem;
+  background-color: #0078d4;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+  height: fit-content;
+  align-self: flex-end;
+}
+
+.generate-button:hover {
+  background-color: #006abb;
+}
+
+.map-wrapper {
+  flex: 1;
+  overflow: hidden;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  background-color: #fff;
+  height: calc(100% - 80px); /* account for the controls height */
+  min-height: 500px;
+}
