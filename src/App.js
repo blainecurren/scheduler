@@ -7,7 +7,6 @@ import PatientList from "./components/patients/PatientList";
 import AppointmentList from "./components/appointments/AppointmentList";
 import MapView from "./components/maps/MapView";
 import RouteOptimizer from "./components/routes/RouteOptimizer";
-// Import the new component - make sure the path is correct
 import NurseLocationMap from "./components/nurses/NurseLocationMap";
 import "./App.css";
 
@@ -20,7 +19,41 @@ function App() {
           <Route path="/nurses" element={<NurseList />} />
           <Route path="/patients" element={<PatientList />} />
           <Route path="/appointments" element={<AppointmentList />} />
-          <Route path="/map" element={<MapView />} />
+          <Route
+            path="/map"
+            element={
+              <MapView
+                nurseLocations={[
+                  {
+                    id: "nurse1",
+                    name: "Jane Smith",
+                    title: "RN",
+                    address: "123 Main St, Austin, TX",
+                    location: { lat: 30.2747, lng: -97.7404 },
+                  },
+                ]}
+                patientLocations={[
+                  {
+                    id: "patient1",
+                    name: "Robert Johnson",
+                    appointmentTime: "09:00 AM",
+                    address: "456 Oak St, Austin, TX",
+                    location: { lat: 30.2747, lng: -97.7404 },
+                  },
+                  {
+                    id: "patient2",
+                    name: "Sarah Miller",
+                    appointmentTime: "10:30 AM",
+                    address: "789 Pine St, Austin, TX",
+                    location: { lat: 30.2843, lng: -97.7466 },
+                  },
+                ]}
+                routes={[]}
+                center={{ lat: 30.2672, lng: -97.7431 }}
+                zoom={12}
+              />
+            }
+          />
           <Route path="/routes" element={<RouteOptimizer />} />
           <Route path="/nurse-map" element={<NurseLocationMap />} />
         </Routes>

@@ -1,0 +1,139 @@
+.scheduler-container {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.calendar-header h2 {
+  margin: 0;
+  color: #333;
+}
+
+.calendar-navigation {
+  display: flex;
+  align-items: center;
+}
+
+.calendar-navigation h3 {
+  margin: 0 1rem;
+  min-width: 150px;
+  text-align: center;
+}
+
+.nav-button {
+  background-color: #f3f3f3;
+  border: none;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-weight: bold;
+  color: #333;
+}
+
+.nav-button:hover {
+  background-color: #e3e3e3;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.weekday {
+  text-align: center;
+  font-weight: 600;
+  color: #555;
+  padding: 0.5rem;
+  border-bottom: 1px solid #eee;
+}
+
+.calendar-day {
+  min-height: 80px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  padding: 0.5rem;
+  cursor: pointer;
+  position: relative;
+}
+
+.calendar-day:hover {
+  background-color: #f9f9f9;
+}
+
+.calendar-day.empty {
+  background-color: #f9f9f9;
+  cursor: default;
+}
+
+.calendar-day.selected {
+  background-color: #e6f7ff;
+  border-color: #0078d4;
+}
+
+.calendar-day.today {
+  font-weight: bold;
+}
+
+.calendar-day.today .day-number {
+  background-color: #0078d4;
+  color: white;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.day-number {
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+
+.appointments-indicator {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.appointment-dot {
+  width: 8px;
+  height: 8px;
+  background-color: #0078d4;
+  border-radius: 50%;
+  margin-right: 4px;
+  margin-bottom: 4px;
+}
+
+.selected-date-info {
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  padding: 1rem;
+}
+
+.selected-date-info h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: #333;
+  font-size: 1.1rem;
+}
+
+.appointment-list {
+  color: #555;
+}
+
+.appointment-list p {
+  margin: 0;
+  font-style: italic;
+}

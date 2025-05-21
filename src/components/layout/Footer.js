@@ -1,11 +1,14 @@
-import React from 'react';
-import './Footer.css';
+import React from "react";
+import "./Footer.css";
 
 const Footer = () => {
   return (
     <footer className="app-footer">
       <div className="footer-content">
-        <p>© {new Date().getFullYear()} Nurse Scheduler. All rights reserved.</p>
+        <p>
+          &copy; {new Date().getFullYear()} Nurse Scheduler - Optimize nurse
+          visit schedules
+        </p>
       </div>
     </footer>
   );

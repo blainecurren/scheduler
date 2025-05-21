@@ -1,0 +1,136 @@
+.nurse-map-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.map-controls {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+}
+
+.checkbox-group {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: auto;
+}
+
+.control-group label {
+  margin-bottom: 0.25rem;
+  font-weight: 500;
+  color: #555;
+}
+
+.nurse-select,
+.date-select {
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.map-wrapper {
+  flex: 1;
+  min-height: 400px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  background-color: white;
+  position: relative;
+}
+
+.nurse-map {
+  height: 100%;
+  width: 100%;
+}
+
+.nurse-info-panel {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.nurse-info-panel h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.nurse-info-panel p {
+  margin: 0.5rem 0;
+  color: #555;
+}
+
+.appointments-list {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+
+.appointments-list h4 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.appointments-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.appointments-list li {
+  padding: 0.75rem;
+  border-radius: 4px;
+  background-color: #f9f9f9;
+  margin-bottom: 0.5rem;
+}
+
+.appointments-list li p {
+  margin: 0.25rem 0;
+}
+
+.appointment-services {
+  font-size: 0.85rem;
+  color: #0078d4;
+}
+
+.marker-popup h3 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  color: #333;
+  font-size: 1rem;
+}
+
+.marker-popup p {
+  margin: 0.25rem 0;
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.loading-container,
+.error-container {
+  padding: 2rem;
+  text-align: center;
+  color: #555;
+}
+
+.error-container {
+  color: #d32f2f;
+}

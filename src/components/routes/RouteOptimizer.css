@@ -55,12 +55,52 @@
   background-color: #006abb;
 }
 
+.generate-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
 .map-wrapper {
   flex: 1;
   overflow: hidden;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   background-color: #fff;
+  position: relative;
   height: calc(100% - 80px); /* account for the controls height */
   min-height: 500px;
+}
+
+.route-info {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 4px;
+  padding: 10px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  max-width: 300px;
+}
+
+.route-info h4 {
+  margin: 0 0 5px;
+  font-size: 14px;
+}
+
+.route-info-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  margin-bottom: 3px;
+}
+
+.route-info-label {
+  font-weight: 500;
+  color: #555;
+}
+
+.route-info-value {
+  font-weight: 600;
+  color: #0078d4;
 }

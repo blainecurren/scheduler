@@ -1,0 +1,75 @@
+.nurse-list-container {
+  padding: 1rem;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1.5rem;
+}
+
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.list-header h2 {
+  margin: 0;
+  color: #333;
+}
+
+.nurse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.nurse-card {
+  border: 1px solid #eee;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+}
+
+.nurse-card-content {
+  padding: 1.25rem;
+  flex: 1;
+}
+
+.nurse-card-content h3 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+.nurse-title {
+  color: #0078d4;
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.nurse-card-content p {
+  margin: 0.5rem 0;
+  color: #555;
+}
+
+.nurse-card-actions {
+  padding: 1rem;
+  background-color: #f9f9f9;
+  border-top: 1px solid #eee;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.loading,
+.error {
+  padding: 2rem;
+  text-align: center;
+  color: #555;
+}
+
+.error {
+  color: #d32f2f;
+}
