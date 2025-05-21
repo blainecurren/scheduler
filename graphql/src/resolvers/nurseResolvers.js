@@ -35,9 +35,25 @@ module.exports = {
   },
   Nurse: {
     location: async (nurse, _, { dataSources }) => {
-      // Get location from FHIR Location resource
-      // This is a placeholder for now
-      return null;
+      // If nurse already has location info, return it
+      if (nurse.location) {
+        return nurse.location;
+      }
+
+      // Otherwise, try to fetch location or return a default
+      try {
+        // This mock implementation returns a random location in Austin
+        return {
+          lat: 30.25 + Math.random() * 0.1,
+          lng: -97.75 - Math.random() * 0.1,
+          address: `${
+            Math.floor(Math.random() * 1000) + 100
+          } Main St, Austin, TX`,
+        };
+      } catch (error) {
+        console.error(`Error getting location for nurse ${nurse.id}:`, error);
+        return null;
+      }
     },
     appointments: async (nurse, _, { dataSources }) => {
       return dataSources.appointmentAPI.getAppointments({ nurseId: nurse.id });
