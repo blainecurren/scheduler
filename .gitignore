@@ -27,4 +27,6 @@ yarn-error.log*
 *.swp
 *.swo
 
-./osm-data/texas.geojson
+# OSM data
+osm-data/texas.geojson
+
