@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # React application
@@ -9,9 +9,9 @@ services:
     ports:
       - "3000:80"
     environment:
-      - REACT_APP_FHIR_API_URL=${FHIR_API_URL}
-      - REACT_APP_AZURE_MAPS_KEY=${AZURE_MAPS_KEY}
-      - REACT_APP_GRAPHHOPPER_URL=http://graphhopper:8080
+      # - REACT_APP_FHIR_API_URL=${FHIR_API_URL}
+      # - REACT_APP_AZURE_MAPS_KEY=${AZURE_MAPS_KEY}
+      - REACT_APP_GRAPHHOPPER_URL=http://graphhopper:8989
     depends_on:
       - graphhopper
     volumes:
@@ -20,15 +20,22 @@ services:
     networks:
       - app-network
 
-  # GraphHopper routing engine
+  # GraphHopper routing engine with the specified configuration
   graphhopper:
-    image: graphhopper/graphhopper:latest
+    image: israelhikingmap/graphhopper:latest
+    container_name: graphhopper
+    restart: unless-stopped
     ports:
-      - "8080:8080"
-    volumes:
-      - graphhopper-data:/data
+      - "8989:8989"
     environment:
-      - JAVA_OPTS=-Xmx1g -Xms1g
+      - JAVA_OPTS=-Xmx6g -Xms6g
+    volumes:
+      - graphhopper_data:/data
+      - osm_data:/osm_data
+    command: >
+      --url https://download.geofabrik.de/north-america/us/texas-latest.osm.pbf
+      -o /data
+      --host 0.0.0.0
     networks:
       - app-network
 
@@ -48,4 +55,5 @@ networks:
     driver: bridge
 
 volumes:
-  graphhopper-data:
+  graphhopper_data:
+  osm_data:
