@@ -26,3 +26,5 @@ yarn-error.log*
 .vscode/
 *.swp
 *.swo
+
+./osm-data/texas.geojson
