@@ -32,3 +32,6 @@ yarn-error.log*
 # OSM data
 osm-data/texas.geojson
 osm-data/texas-latest.osm.pbf
+
+# Graphql data
+/graphql/data
