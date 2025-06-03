@@ -536,3 +536,462 @@ Environment Variables:
     main();
   }
 }
+
+// Fetch all patients
+async function getAllPatients(token, options = {}) {
+  logger.info("Fetching all patients from HCHB API...");
+
+  const { 
+    batchSize = BATCH_SIZE,
+    maxPatients = null,
+    includeInactive = false
+  } = options;
+
+  const patients = [];
+  let nextUrl = `${API_BASE_URL}/Patient`;
+  const params = {
+    _count: batchSize,
+    _sort: 'family', // Sort by last name
+  };
+
+  if (!includeInactive) {
+    params.active = 'true';
+  }
+
+  const headers = {
+    "Authorization": `Bearer ${token}`,
+    "Accept": "application/fhir+json"
+  };
+
+  try {
+    while (nextUrl && (!maxPatients || patients.length < maxPatients)) {
+      logger.debug(`Fetching patients from: ${nextUrl}`);
+
+      const response = await axios.get(nextUrl, {
+        timeout:  REQUEST_TIMEOUT,
+        headers: headers,
+        params: nextUrl === `${API_BASE_URL}/Patient` ? params : undefined
+      });
+
+      const bundle = response.data;
+
+      if (bundle.entry && bundle.entry.length > 0) {
+        const batchPatients = bundle.entry.map(entry => transformPatient(entry.resource));
+        patients.push(...batchPatients);
+
+        logger.info(`Fetched ${batchPatients.length} patients (total: ${patients.length})`);
+      }
+
+      // Find next page URL
+      nextUrl = null;
+      if (bundle.link) {
+        const nextLink = bundle.link.find(link => link.relation === 'next');
+        if (nextLink) {
+          nextUrl = nextLink.url;
+        }
+      }
+
+      //Rate Limiting
+      await sleep(100)
+    }
+
+    logger.info(`Successfully fetched ${patients.length} patients total`)
+    return patients;
+
+  } catch (error) {
+    logger.error(`Error fetching patinets: ${error.message}`, error);
+    throw error;
+  }
+}
+
+// Fetch Appointments
+async function getAppointments(token, dateFilter = "today", options = {}) {
+  logger.info(`Fetching appointments for: ${dateFilter}`);
+
+  const {
+    batchSize = BATCH_SIZE,
+    maxAppointments = null, 
+    status = null // 'booked', 'arrived', 'fulfilled', etc.
+  } = options;
+
+  const appointments = [];
+  let nextUrl = `${API_BASE_URL}/Appointment`;
+
+  const params = {
+    _count: batchSize,
+    _sort: 'date'
+  };
+
+  if (dateFilter === "today") {
+    const today = new Date().toISOString().split('T')[0];
+    params.date = `ge${today}&date=lt${getNextDat(today)}`;
+  } else if (dateFilter === "week") {
+    const startOfWeek = getStartOfWeek();
+    const endOfWeek = getEndOfWeek();
+    params.data = `ge${startOfWeek}&date=le${endOfWeek}`;
+  } else if (dateFilter.includes('-')) {
+    params.date = `ge${dateFilter}&date=lt${getNextDat(dateFilter)}`;
+  }
+
+  if (status) {
+     params.status = status;
+  }
+
+  const headers = {
+    "Authorization": `Bearer ${token}`,
+    "Accept": "application/fhir+json"
+  };
+
+  try {
+    while (nextUrl && (!maxAppointments || appointments.length < maxAppointments)) {
+      logger.debug(`Fetching appointments from: ${nextUrl}`);
+
+      const response = await axios.get(nextUrl, {
+        timeout: REQUEST_TIMEOUT,
+        headers: headers,
+        params: nextUrl === `${API_BASE_URL}/Appointment` ? params : undefined
+      });
+
+      const bundle = response.data;
+
+      if (bundle.entry && bundle.entry.length > 0) {
+        const batchAppointments = bundle.entry.map(entry => transformAppointment(entry.resource));
+        appointments.push(...batchAppointments);
+
+        logger.info(`Fetched ${batchAppointments.length} appointments (total: ${appointments.length})`);
+      }
+
+      // Find next page URL
+      nextUrl = null;
+      if (bundle.link) {
+        const nextLink = bundle.link.find(link => link.relation === 'next');
+        if (nextLink) {
+          nextUrl = nextLink.url;
+        }
+      }
+
+      // Rate Limiting
+      await sleep(100)
+    }
+
+    logger.info(`Successfully fetched ${appointments.length} appointments total`);
+    return appointments;
+  } catch (error) {
+    logger.error(`Error fetching appointments: ${error.message}`, error);
+    throw error;
+  }
+}
+
+// Fetch Practitioners 
+async function getAllPractitioners(token, options = {}) {
+  logger.info("Fetching all practitioners from HCHB API...");
+
+  const {
+    batchSize = BATCH_SIZE,
+    maxPractitioners = null,
+    specialty = null,
+  } = options;
+
+const practitioners = [];
+let nextUrl = `${API_BASE_URL}/Practitioner`;
+const params = {
+  _count: batchSize,
+  _sort: 'family',
+  active: 'true'
+};
+
+if (specialty) {
+  params['qualification.code'] = specialty;
+}
+
+const headers = {
+    "Authorization": `Bearer ${token}`,
+    "Accept": "application/fhir+json"
+  };
+  
+  try {
+    while (nextUrl && (!maxPractitioners || practitioners.length < maxPractitioners)) {
+      logger.debug(`Fetching practitioners from: ${nextUrl}`);
+      
+      const response = await axios.get(nextUrl, {
+        timeout: REQUEST_TIMEOUT,
+        headers: headers,
+        params: nextUrl === `${API_BASE_URL}/Practitioner` ? params : undefined
+      });
+      
+      const bundle = response.data;
+      
+      if (bundle.entry && bundle.entry.length > 0) {
+        const batchPractitioners = bundle.entry.map(entry => transformPractitioner(entry.resource));
+        practitioners.push(...batchPractitioners);
+        
+        logger.info(`Fetched ${batchPractitioners.length} practitioners (total: ${practitioners.length})`);
+      }
+      
+      // Find next page URL
+      nextUrl = null;
+      if (bundle.link) {
+        const nextLink = bundle.link.find(link => link.relation === 'next');
+        if (nextLink) {
+          nextUrl = nextLink.url;
+        }
+      }
+      
+      // Rate limiting
+      await sleep(100);
+    }
+    
+    logger.info(`Successfully fetched ${practitioners.length} practitioners total`);
+    return practitioners;
+    
+  } catch (error) {
+    logger.error(`Error fetching practitioners: ${error.message}`, error);
+    throw error;
+  }
+}
+
+/**
+ * Transform FHIR Patient to our internal format
+ */
+function transformPatient(fhirPatient) {
+  return {
+    id: fhirPatient.id,
+    resourceType: 'Patient',
+    name: formatHumanName(fhirPatient.name?.[0]),
+    active: fhirPatient.active,
+    gender: fhirPatient.gender,
+    birthDate: fhirPatient.birthDate,
+    address: fhirPatient.address?.[0] || null,
+    telecom: fhirPatient.telecom || [],
+    phoneNumber: getContactValue(fhirPatient.telecom, 'phone'),
+    email: getContactValue(fhirPatient.telecom, 'email'),
+    // Extract care needs from extensions if available
+    careNeeds: extractCareNeeds(fhirPatient.extension),
+    // Raw FHIR data for reference
+    _raw: fhirPatient
+  };
+}
+
+/**
+ * Transform FHIR Appointment to our internal format
+ */
+function transformAppointment(fhirAppointment) {
+  const participants = fhirAppointment.participant || [];
+  
+  return {
+    id: fhirAppointment.id,
+    resourceType: 'Appointment',
+    status: fhirAppointment.status,
+    start: fhirAppointment.start,
+    end: fhirAppointment.end,
+    serviceType: fhirAppointment.serviceType || [],
+    participants: participants.map(p => ({
+      actor: p.actor,
+      status: p.status,
+      type: p.type
+    })),
+    // Extract patient and practitioner references
+    patientRef: participants.find(p => p.actor?.reference?.startsWith('Patient/'))?.actor?.reference,
+    practitionerRef: participants.find(p => p.actor?.reference?.startsWith('Practitioner/'))?.actor?.reference,
+    patientId: participants.find(p => p.actor?.reference?.startsWith('Patient/'))?.actor?.reference?.replace('Patient/', ''),
+    practitionerId: participants.find(p => p.actor?.reference?.startsWith('Practitioner/'))?.actor?.reference?.replace('Practitioner/', ''),
+    comment: fhirAppointment.comment,
+    description: fhirAppointment.description,
+    // Raw FHIR data for reference
+    _raw: fhirAppointment
+  };
+}
+
+/**
+ * Transform FHIR Practitioner to our internal format
+ */
+function transformPractitioner(fhirPractitioner) {
+  return {
+    id: fhirPractitioner.id,
+    resourceType: 'Practitioner',
+    name: formatHumanName(fhirPractitioner.name?.[0]),
+    active: fhirPractitioner.active,
+    gender: fhirPractitioner.gender,
+    birthDate: fhirPractitioner.birthDate,
+    telecom: fhirPractitioner.telecom || [],
+    phoneNumber: getContactValue(fhirPractitioner.telecom, 'phone'),
+    email: getContactValue(fhirPractitioner.telecom, 'email'),
+    qualification: fhirPractitioner.qualification || [],
+    specialty: extractSpecialty(fhirPractitioner.qualification),
+    // Raw FHIR data for reference
+    _raw: fhirPractitioner
+  };
+}
+
+/**
+ * Save data to JSON files for development/debugging
+ */
+async function saveDataToFiles(data, dataType) {
+  const outputDir = path.join(__dirname, '../../../data');
+  
+  // Create data directory if it doesn't exist
+  try {
+    await fs.mkdir(outputDir, { recursive: true });
+  } catch (error) {
+    // Directory might already exist
+  }
+  
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const filename = `${dataType}_${timestamp}.json`;
+  const filepath = path.join(outputDir, filename);
+  
+  try {
+    await fs.writeFile(filepath, JSON.stringify(data, null, 2));
+    logger.info(`Saved ${data.length} ${dataType} records to: ${filepath}`);
+  } catch (error) {
+    logger.error(`Error saving ${dataType} data to file: ${error.message}`, error);
+  }
+}
+
+/**
+ * Main data sync function - this is what actually pulls and processes data
+ */
+async function syncAllData() {
+  logger.info("🔄 Starting complete data sync from HCHB...");
+  
+  try {
+    // Get authentication token
+    const token = await getHchbToken();
+    
+    // Fetch all data types
+    logger.info("📋 Fetching patients...");
+    const patients = await getAllPatients(token, { maxPatients: 100 }); // Limit for testing
+    await saveDataToFiles(patients, 'patients');
+    
+    logger.info("👩‍⚕️ Fetching practitioners...");
+    const practitioners = await getAllPractitioners(token, { maxPractitioners: 50 });
+    await saveDataToFiles(practitioners, 'practitioners');
+    
+    logger.info("📅 Fetching appointments...");
+    const appointments = await getAppointments(token, "week", { maxAppointments: 200 });
+    await saveDataToFiles(appointments, 'appointments');
+    
+    // Summary
+    logger.info("✅ Data sync completed successfully!");
+    logger.info(`📊 Summary:`);
+    logger.info(`   Patients: ${patients.length}`);
+    logger.info(`   Practitioners: ${practitioners.length}`);
+    logger.info(`   Appointments: ${appointments.length}`);
+    
+    return {
+      patients,
+      practitioners,
+      appointments,
+      summary: {
+        patientCount: patients.length,
+        practitionerCount: practitioners.length,
+        appointmentCount: appointments.length,
+        syncTime: new Date().toISOString()
+      }
+    };
+    
+  } catch (error) {
+    logger.error("❌ Data sync failed", error);
+    throw error;
+  }
+}
+
+// Helper functions
+function formatHumanName(name) {
+  if (!name) return "";
+  const parts = [];
+  if (name.prefix) parts.push(name.prefix.join(" "));
+  if (name.given) parts.push(name.given.join(" "));
+  if (name.family) parts.push(name.family);
+  return parts.filter(Boolean).join(" ");
+}
+
+function getContactValue(telecom, system) {
+  if (!telecom || !telecom.length) return null;
+  const contact = telecom.find(t => t.system === system);
+  return contact?.value;
+}
+
+function extractCareNeeds(extensions) {
+  // This would extract care needs from FHIR extensions if they exist
+  // Implementation depends on how HCHB structures their extensions
+  return [];
+}
+
+function extractSpecialty(qualifications) {
+  if (!qualifications || !qualifications.length) return null;
+  return qualifications[0]?.code?.text || qualifications[0]?.code?.coding?.[0]?.display;
+}
+
+function getNextDay(dateString) {
+  const date = new Date(dateString);
+  date.setDate(date.getDate() + 1);
+  return date.toISOString().split('T')[0];
+}
+
+function getStartOfWeek() {
+  const today = new Date();
+  const day = today.getDay();
+  const diff = today.getDate() - day;
+  return new Date(today.setDate(diff)).toISOString().split('T')[0];
+}
+
+function getEndOfWeek() {
+  const today = new Date();
+  const day = today.getDay();
+  const diff = today.getDate() - day + 6;
+  return new Date(today.setDate(diff)).toISOString().split('T')[0];
+}
+
+// Export new functions
+module.exports = {
+  // ... existing exports
+  getAllPatients,
+  getAppointments,
+  getAllPractitioners,
+  syncAllData,
+  transformPatient,
+  transformAppointment,
+  transformPractitioner
+};
+
+// Update the main module check
+if (require.main === module) {
+  const args = process.argv.slice(2);
+  
+  if (args.includes('--sync') || args.includes('-s')) {
+    // Run full data sync
+    syncAllData().then(result => {
+      console.log("Data sync completed!");
+      process.exit(0);
+    }).catch(error => {
+      console.error("Data sync failed:", error.message);
+      process.exit(1);
+    });
+  } else if (args.includes('--patients') || args.includes('-p')) {
+    // Sync patients only
+    getHchbToken().then(token => 
+      getAllPatients(token)
+    ).then(patients => {
+      console.log(`Fetched ${patients.length} patients`);
+      saveDataToFiles(patients, 'patients');
+      process.exit(0);
+    }).catch(error => {
+      console.error("Patient sync failed:", error.message);
+      process.exit(1);
+    });
+  } else if (args.includes('--appointments') || args.includes('-a')) {
+    // Sync appointments only
+    getHchbToken().then(token => 
+      getAppointments(token, "today")
+    ).then(appointments => {
+      console.log(`Fetched ${appointments.length} appointments`);
+      saveDataToFiles(appointments, 'appointments');
+      process.exit(0);
+    }).catch(error => {
+      console.error("Appointment sync failed:", error.message);
+      process.exit(1);
+    });
+  }
+  // ... keep existing test commands
+}
