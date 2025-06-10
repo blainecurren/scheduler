@@ -82,11 +82,11 @@ function loadGlobalEnv() {
 const envFilePath = loadGlobalEnv();
 
 // HCHB API Configuration from environment variables
-const CLIENT_ID = process.env.HCHB_CLIENT_ID;
-const RESOURCE_SECURITY_ID = process.env.HCHB_RESOURCE_SECURITY_ID;
-const AGENCY_SECRET = process.env.HCHB_AGENCY_SECRET;
-const TOKEN_URL = process.env.HCHB_TOKEN_URL;
-const API_BASE_URL = process.env.HCHB_API_BASE_URL;
+const CLIENT_ID = process.env.CLIENT_ID;
+const RESOURCE_SECURITY_ID = process.env.RESOURCE_SECURITY_ID;
+const AGENCY_SECRET = process.env.AGENCY_SECRET;
+const TOKEN_URL = process.env.TOKEN_URL;
+const API_BASE_URL = process.env.API_BASE_URL;
 const REQUEST_TIMEOUT = parseInt(process.env.HCHB_REQUEST_TIMEOUT) || 60000;
 const BATCH_SIZE = parseInt(process.env.HCHB_BATCH_SIZE) || 100;
 const MAX_CONCURRENT_REQUESTS = parseInt(process.env.HCHB_MAX_CONCURRENT_REQUESTS) || 10;
@@ -94,11 +94,11 @@ const MAX_CONCURRENT_REQUESTS = parseInt(process.env.HCHB_MAX_CONCURRENT_REQUEST
 // Validate required environment variables
 function validateEnvironmentVariables() {
   const requiredVars = [
-    'HCHB_CLIENT_ID',
-    'HCHB_RESOURCE_SECURITY_ID', 
-    'HCHB_AGENCY_SECRET',
-    'HCHB_TOKEN_URL',
-    'HCHB_API_BASE_URL'
+    'CLIENT_ID',
+    'RESOURCE_SECURITY_ID', 
+    'AGENCY_SECRET',
+    'TOKEN_URL',
+    'API_BASE_URL'
   ];
   
   const missingVars = requiredVars.filter(varName => !process.env[varName]);
@@ -369,11 +369,11 @@ async function runAllTests() {
   
   // Show current environment variables (safely)
   logger.test("Environment variables status:");
-  logger.test(`  HCHB_CLIENT_ID: ${process.env.HCHB_CLIENT_ID ? '✅ SET' : '❌ NOT SET'}`);
-  logger.test(`  HCHB_RESOURCE_SECURITY_ID: ${process.env.HCHB_RESOURCE_SECURITY_ID ? '✅ SET' : '❌ NOT SET'}`);
-  logger.test(`  HCHB_AGENCY_SECRET: ${process.env.HCHB_AGENCY_SECRET ? '✅ SET' : '❌ NOT SET'}`);
-  logger.test(`  HCHB_TOKEN_URL: ${process.env.HCHB_TOKEN_URL ? '✅ SET' : '❌ NOT SET'}`);
-  logger.test(`  HCHB_API_BASE_URL: ${process.env.HCHB_API_BASE_URL ? '✅ SET' : '❌ NOT SET'}`);
+  logger.test(`  CLIENT_ID: ${process.env.CLIENT_ID ? '✅ SET' : '❌ NOT SET'}`);
+  logger.test(`  RESOURCE_SECURITY_ID: ${process.env.RESOURCE_SECURITY_ID ? '✅ SET' : '❌ NOT SET'}`);
+  logger.test(`  AGENCY_SECRET: ${process.env.AGENCY_SECRET ? '✅ SET' : '❌ NOT SET'}`);
+  logger.test(`  TOKEN_URL: ${process.env.TOKEN_URL ? '✅ SET' : '❌ NOT SET'}`);
+  logger.test(`  API_BASE_URL: ${process.env.API_BASE_URL ? '✅ SET' : '❌ NOT SET'}`);
   
   // Validate environment
   try {
