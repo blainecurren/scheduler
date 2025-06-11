@@ -13,9 +13,12 @@
     "test:hchb-token": "node src/datasources/fhir/HCHBservice.js --test-token",
     "test:hchb-connection": "node src/datasources/fhir/HCHBservice --test-connection",
     "sync:hchb": "node src/datasources/fhir/HCHBservice.js",
-    "sync:all":"node src/datasources/fhir/HCHBservice.js --sync",
+    "sync:all": "node src/datasources/fhir/HCHBservice.js --sync",
     "sync:patients": "node src/datasources/fhir/HCHBservice.js --patients",
-    "sync:appointments":"node src/datasources/fhir/HCHBservice.js --appointments"
+    "sync:appointments": "node src/datasources/fhir/HCHBservice.js --appointments",
+    "test:integration": "node src/test-hchb-integration.js",
+    "start:mock": "USE_MOCK_DATA=true node src/index.js",
+    "start:hchb": "USE_MOCK_DATA=false node src/index.js"
   },
   "dependencies": {
     "@apollo/client": "^3.8.0",

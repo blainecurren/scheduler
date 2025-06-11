@@ -857,7 +857,10 @@ function transformPatient(fhirPatient) {
   const careNeeds = [];
   if (fhirPatient.extension) {
     // Look for diagnosis extension
-    const diagnosisExt = fhirePatient.extension.find(
+    const diagnosisExt = fhirPatient.extension.find(
+      (ext) => ext.url === "serviceCode"
+    );
+    const serviceCodeExt = fhirPatient.extension.find(
       (ext) => ext.url === "serviceCode"
     );
     if (serviceCodeExt?.valueString) {
@@ -899,10 +902,10 @@ function transformPatient(fhirPatient) {
     resourceType: "Patient",
     name: name,
     active: fhirPatient.active,
-    gender: fhirePatient.gender,
-    birthDate: fhirePatient.birthDate,
+    gender: fhirPatient.gender,
+    birthDate: fhirPatient.birthDate,
     address: address,
-    telecom: fhirePatient.telecom || [],
+    telecom: fhirPatient.telecom || [],
     phoneNumber: phoneNumber,
     email: email,
     careNeeds: careNeeds,

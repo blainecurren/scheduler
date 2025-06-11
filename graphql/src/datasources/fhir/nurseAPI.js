@@ -16,7 +16,7 @@ class nurseAPI extends RESTDataSource {
     request.headers.set("Content-Type", "application/fhir+json");
   }
 
-  async getAuthToken() {
+  async getToken() {
     // Check if we have a valid token
     if (this.token && this.tokenExpiry && new Date() < this.tokenExpiry) {
       return this.token;
@@ -30,7 +30,7 @@ class nurseAPI extends RESTDataSource {
     return this.token;
   }
 
-  async getAllNurses() {
+  async getNurses() {
     try {
       const token = await this.getAuthToken();
 
