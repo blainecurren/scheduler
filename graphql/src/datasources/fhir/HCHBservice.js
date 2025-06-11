@@ -1,24 +1,24 @@
-const axios = require('axios');
-const fs = require('fs').promises;
-const path = require('path');
+const axios = require("axios");
+const fs = require("fs").promises;
+const path = require("path");
 
 // Load environment variables from global .env file
-const dotenv = require('dotenv');
+const dotenv = require("dotenv");
 
 // Robust environment loader - searches for .env file in parent directories
 function findEnvFile(startDir = __dirname) {
   let currentDir = startDir;
-  
+
   while (currentDir !== path.dirname(currentDir)) {
-    const envPath = path.join(currentDir, '.env');
+    const envPath = path.join(currentDir, ".env");
     try {
-      require('fs').accessSync(envPath);
+      require("fs").accessSync(envPath);
       return envPath;
     } catch {
       currentDir = path.dirname(currentDir);
     }
   }
-  
+
   return null;
 }
 
@@ -26,38 +26,38 @@ function findEnvFile(startDir = __dirname) {
 function loadGlobalEnv() {
   // For your specific project structure: scheduler/graphql/src/datasources/fhir/HCHBservice.js
   // We need to go up 4 levels to reach the project root (scheduler/)
-  const projectRoot = path.resolve(__dirname, '../../../..');
-  const rootEnvPath = path.join(projectRoot, '.env');
-  
+  const projectRoot = path.resolve(__dirname, "../../../..");
+  const rootEnvPath = path.join(projectRoot, ".env");
+
   // Try multiple strategies to find .env file
   const strategies = [
     // 1. Use ENV_FILE_PATH if set
     process.env.ENV_FILE_PATH,
-    
+
     // 2. Project root (4 levels up from this file)
     rootEnvPath,
-    
+
     // 3. Search upward from current directory
     findEnvFile(__dirname),
-    
+
     // 4. Try process.cwd() (where the script was run from)
-    path.join(process.cwd(), '.env'),
-    
+    path.join(process.cwd(), ".env"),
+
     // 5. Try other common locations
-    path.join(__dirname, '../../..', '.env'),     // 3 levels up
-    path.join(__dirname, '../..', '.env'),        // 2 levels up
-    path.join(__dirname, '..', '.env'),           // 1 level up
-    path.join(__dirname, '.env')                  // current directory
+    path.join(__dirname, "../../..", ".env"), // 3 levels up
+    path.join(__dirname, "../..", ".env"), // 2 levels up
+    path.join(__dirname, "..", ".env"), // 1 level up
+    path.join(__dirname, ".env"), // current directory
   ];
-  
+
   console.log(`🔍 Looking for .env file, expecting it at: ${rootEnvPath}`);
-  
+
   for (const envPath of strategies) {
     if (envPath) {
       try {
         // Check if file exists first
-        require('fs').accessSync(envPath);
-        
+        require("fs").accessSync(envPath);
+
         // Try to load it
         const result = dotenv.config({ path: envPath });
         if (!result.error) {
@@ -72,8 +72,10 @@ function loadGlobalEnv() {
       }
     }
   }
-  
-  console.warn('⚠️  Could not find .env file, using system environment variables');
+
+  console.warn(
+    "⚠️  Could not find .env file, using system environment variables"
+  );
   dotenv.config(); // Fallback to default behavior
   return null;
 }
@@ -89,22 +91,25 @@ const TOKEN_URL = process.env.TOKEN_URL;
 const API_BASE_URL = process.env.API_BASE_URL;
 const REQUEST_TIMEOUT = parseInt(process.env.HCHB_REQUEST_TIMEOUT) || 60000;
 const BATCH_SIZE = parseInt(process.env.HCHB_BATCH_SIZE) || 100;
-const MAX_CONCURRENT_REQUESTS = parseInt(process.env.HCHB_MAX_CONCURRENT_REQUESTS) || 10;
+const MAX_CONCURRENT_REQUESTS =
+  parseInt(process.env.HCHB_MAX_CONCURRENT_REQUESTS) || 10;
 
 // Validate required environment variables
 function validateEnvironmentVariables() {
   const requiredVars = [
-    'CLIENT_ID',
-    'RESOURCE_SECURITY_ID', 
-    'AGENCY_SECRET',
-    'TOKEN_URL',
-    'API_BASE_URL'
+    "CLIENT_ID",
+    "RESOURCE_SECURITY_ID",
+    "AGENCY_SECRET",
+    "TOKEN_URL",
+    "API_BASE_URL",
   ];
-  
-  const missingVars = requiredVars.filter(varName => !process.env[varName]);
-  
+
+  const missingVars = requiredVars.filter((varName) => !process.env[varName]);
+
   if (missingVars.length > 0) {
-    throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+    throw new Error(
+      `Missing required environment variables: ${missingVars.join(", ")}`
+    );
   }
 }
 
@@ -113,7 +118,7 @@ const LOG_LEVELS = {
   ERROR: 0,
   WARN: 1,
   INFO: 2,
-  DEBUG: 3
+  DEBUG: 3,
 };
 
 const currentLogLevel = LOG_LEVELS[process.env.LOG_LEVEL] || LOG_LEVELS.INFO;
@@ -147,7 +152,7 @@ const logger = {
   },
   test: (msg) => {
     console.log(`[TEST] ${new Date().toISOString()} - ${msg}`);
-  }
+  },
 };
 
 /**
@@ -159,9 +164,9 @@ async function getHchbToken() {
     tokenUrl: TOKEN_URL,
     clientId: CLIENT_ID,
     resourceSecurityId: RESOURCE_SECURITY_ID ? "***SET***" : "***NOT SET***",
-    agencySecret: AGENCY_SECRET ? "***SET***" : "***NOT SET***"
+    agencySecret: AGENCY_SECRET ? "***SET***" : "***NOT SET***",
   });
-  
+
   const data = new URLSearchParams({
     grant_type: "agency_auth",
     client_id: CLIENT_ID,
@@ -169,49 +174,55 @@ async function getHchbToken() {
     resource_security_id: RESOURCE_SECURITY_ID,
     agency_secret: AGENCY_SECRET,
   });
-  
+
   logger.debug("Request payload", {
     grant_type: "agency_auth",
     client_id: CLIENT_ID,
     scope: "openid HCHB.api.scope agency.identity hchb.identity",
     resource_security_id: RESOURCE_SECURITY_ID ? "***SET***" : "***NOT SET***",
-    agency_secret: AGENCY_SECRET ? "***SET***" : "***NOT SET***"
+    agency_secret: AGENCY_SECRET ? "***SET***" : "***NOT SET***",
   });
-  
+
   try {
     logger.debug(`Making POST request to: ${TOKEN_URL}`);
-    
+
     const response = await axios.post(TOKEN_URL, data, {
       timeout: REQUEST_TIMEOUT,
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      }
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
     });
-    
+
     const token = response.data.access_token;
     logger.info("Successfully obtained HCHB API token");
     logger.debug("Token details", {
       tokenLength: token ? token.length : 0,
       expiresIn: response.data.expires_in,
-      tokenType: response.data.token_type
+      tokenType: response.data.token_type,
     });
     return token;
   } catch (error) {
     logger.error(`Failed to obtain token: ${error.message}`, error);
-    
+
     // Enhanced error logging
     if (error.response) {
       logger.error(`Response status: ${error.response.status}`);
       logger.error(`Response status text: ${error.response.statusText}`);
-      logger.error(`Response headers: ${JSON.stringify(error.response.headers, null, 2)}`);
-      logger.error(`Response data: ${JSON.stringify(error.response.data, null, 2)}`);
+      logger.error(
+        `Response headers: ${JSON.stringify(error.response.headers, null, 2)}`
+      );
+      logger.error(
+        `Response data: ${JSON.stringify(error.response.data, null, 2)}`
+      );
     } else if (error.request) {
       logger.error("No response received from server");
-      logger.error(`Request details: ${JSON.stringify(error.request, null, 2)}`);
+      logger.error(
+        `Request details: ${JSON.stringify(error.request, null, 2)}`
+      );
     } else {
       logger.error(`Request setup error: ${error.message}`);
     }
-    
+
     throw error;
   }
 }
@@ -220,7 +231,7 @@ async function getHchbToken() {
  * Sleep utility function
  */
 function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -228,21 +239,28 @@ function sleep(ms) {
  */
 async function testConnection() {
   logger.test("Testing connection to HCHB endpoints...");
-  
+
   try {
     // Test token endpoint directly with a HEAD request
     logger.test("Testing token endpoint accessibility...");
     logger.test(`Token URL: ${TOKEN_URL}`);
-    
+
     // Try a HEAD request to the actual token endpoint
     const tokenResponse = await axios.head(TOKEN_URL, {
-      timeout: 10000
+      timeout: 10000,
     });
-    logger.test(`✅ Token endpoint accessible - Status: ${tokenResponse.status}`);
+    logger.test(
+      `✅ Token endpoint accessible - Status: ${tokenResponse.status}`
+    );
   } catch (error) {
     // This is expected to fail with 400/405 since HEAD requests aren't supported
-    if (error.response && (error.response.status === 400 || error.response.status === 405)) {
-      logger.test(`✅ Token endpoint reachable (returned ${error.response.status} as expected for HEAD request)`);
+    if (
+      error.response &&
+      (error.response.status === 400 || error.response.status === 405)
+    ) {
+      logger.test(
+        `✅ Token endpoint reachable (returned ${error.response.status} as expected for HEAD request)`
+      );
     } else {
       logger.test(`❌ Token endpoint test failed: ${error.message}`);
       if (error.response) {
@@ -250,26 +268,30 @@ async function testConnection() {
       }
     }
   }
-  
+
   try {
     // Test API base URL - but don't fail if it requires auth
     logger.test("Testing FHIR API endpoint accessibility...");
     logger.test(`API Base URL: ${API_BASE_URL}`);
-    
+
     const apiResponse = await axios.get(`${API_BASE_URL}/metadata`, {
       timeout: 10000,
-      headers: { 'Accept': 'application/fhir+json' }
+      headers: { Accept: "application/fhir+json" },
     });
-    logger.test(`✅ FHIR API endpoint accessible - Status: ${apiResponse.status}`);
+    logger.test(
+      `✅ FHIR API endpoint accessible - Status: ${apiResponse.status}`
+    );
     logger.debug("FHIR Capability Statement", {
       fhirVersion: apiResponse.data.fhirVersion,
       software: apiResponse.data.software?.name,
-      implementationDescription: apiResponse.data.implementation?.description
+      implementationDescription: apiResponse.data.implementation?.description,
     });
   } catch (error) {
     // Don't fail if it's just auth required (401)
     if (error.response && error.response.status === 401) {
-      logger.test(`✅ FHIR API endpoint reachable (401 - authentication required as expected)`);
+      logger.test(
+        `✅ FHIR API endpoint reachable (401 - authentication required as expected)`
+      );
     } else {
       logger.test(`❌ FHIR API endpoint test failed: ${error.message}`);
       if (error.response) {
@@ -278,7 +300,7 @@ async function testConnection() {
       return false;
     }
   }
-  
+
   return true;
 }
 
@@ -287,11 +309,17 @@ async function testConnection() {
  */
 async function testTokenGeneration() {
   logger.test("Testing token generation...");
-  
+
   try {
     const token = await getHchbToken();
-    logger.test(`✅ Token generation successful - Length: ${token.length} characters`);
-    logger.test(`Token preview: ${token.substring(0, 20)}...${token.substring(token.length - 10)}`);
+    logger.test(
+      `✅ Token generation successful - Length: ${token.length} characters`
+    );
+    logger.test(
+      `Token preview: ${token.substring(0, 20)}...${token.substring(
+        token.length - 10
+      )}`
+    );
     return token;
   } catch (error) {
     logger.test(`❌ Token generation failed: ${error.message}`);
@@ -307,49 +335,55 @@ async function testApiAccess(token) {
     logger.test("❌ Cannot test API access - no token provided");
     return false;
   }
-  
+
   logger.test("Testing authenticated API access...");
-  
+
   try {
     const headers = {
-      "Authorization": `Bearer ${token}`,
-      "Accept": "application/fhir+json"
+      Authorization: `Bearer ${token}`,
+      Accept: "application/fhir+json",
     };
-    
+
     // Test simple Patient search
     logger.test("Testing Patient resource access...");
     const patientResponse = await axios.get(`${API_BASE_URL}/Patient`, {
       timeout: 30000,
       headers: headers,
-      params: { "_count": "1" }
+      params: { _count: "1" },
     });
-    
-    logger.test(`✅ Patient resource accessible - Status: ${patientResponse.status}`);
+
+    logger.test(
+      `✅ Patient resource accessible - Status: ${patientResponse.status}`
+    );
     logger.debug("Patient response", {
       total: patientResponse.data.total,
-      entryCount: patientResponse.data.entry?.length || 0
+      entryCount: patientResponse.data.entry?.length || 0,
     });
-    
+
     // Test Appointment search
     logger.test("Testing Appointment resource access...");
     const appointmentResponse = await axios.get(`${API_BASE_URL}/Appointment`, {
       timeout: 30000,
       headers: headers,
-      params: { "_count": "1" }
+      params: { _count: "1" },
     });
-    
-    logger.test(`✅ Appointment resource accessible - Status: ${appointmentResponse.status}`);
+
+    logger.test(
+      `✅ Appointment resource accessible - Status: ${appointmentResponse.status}`
+    );
     logger.debug("Appointment response", {
       total: appointmentResponse.data.total,
-      entryCount: appointmentResponse.data.entry?.length || 0
+      entryCount: appointmentResponse.data.entry?.length || 0,
     });
-    
+
     return true;
   } catch (error) {
     logger.test(`❌ API access test failed: ${error.message}`);
     if (error.response) {
       logger.test(`Response status: ${error.response.status}`);
-      logger.test(`Response data: ${JSON.stringify(error.response.data, null, 2)}`);
+      logger.test(
+        `Response data: ${JSON.stringify(error.response.data, null, 2)}`
+      );
     }
     return false;
   }
@@ -361,73 +395,89 @@ async function testApiAccess(token) {
 async function runAllTests() {
   logger.test("🚀 Starting HCHB FHIR API Client Tests");
   logger.test("=".repeat(50));
-  
+
   // Debug environment loading
   logger.test(`Current working directory: ${process.cwd()}`);
   logger.test(`Script location: ${__dirname}`);
-  logger.test(`Environment file used: ${envFilePath || 'None found'}`);
-  
+  logger.test(`Environment file used: ${envFilePath || "None found"}`);
+
   // Show current environment variables (safely)
   logger.test("Environment variables status:");
-  logger.test(`  CLIENT_ID: ${process.env.CLIENT_ID ? '✅ SET' : '❌ NOT SET'}`);
-  logger.test(`  RESOURCE_SECURITY_ID: ${process.env.RESOURCE_SECURITY_ID ? '✅ SET' : '❌ NOT SET'}`);
-  logger.test(`  AGENCY_SECRET: ${process.env.AGENCY_SECRET ? '✅ SET' : '❌ NOT SET'}`);
-  logger.test(`  TOKEN_URL: ${process.env.TOKEN_URL ? '✅ SET' : '❌ NOT SET'}`);
-  logger.test(`  API_BASE_URL: ${process.env.API_BASE_URL ? '✅ SET' : '❌ NOT SET'}`);
-  
+  logger.test(
+    `  CLIENT_ID: ${process.env.CLIENT_ID ? "✅ SET" : "❌ NOT SET"}`
+  );
+  logger.test(
+    `  RESOURCE_SECURITY_ID: ${
+      process.env.RESOURCE_SECURITY_ID ? "✅ SET" : "❌ NOT SET"
+    }`
+  );
+  logger.test(
+    `  AGENCY_SECRET: ${process.env.AGENCY_SECRET ? "✅ SET" : "❌ NOT SET"}`
+  );
+  logger.test(
+    `  TOKEN_URL: ${process.env.TOKEN_URL ? "✅ SET" : "❌ NOT SET"}`
+  );
+  logger.test(
+    `  API_BASE_URL: ${process.env.API_BASE_URL ? "✅ SET" : "❌ NOT SET"}`
+  );
+
   // Validate environment
   try {
     validateEnvironmentVariables();
     logger.test("✅ Environment variables validation passed");
   } catch (error) {
     logger.test(`❌ Environment validation failed: ${error.message}`);
-    
+
     // Provide helpful debugging information
     logger.test("\n🔍 Debugging suggestions:");
     logger.test("1. Check if .env file exists in project root");
     logger.test("2. Verify .env file contains the required HCHB variables");
-    logger.test("3. Ensure .env file is not in .gitignore if you expect it to be there");
+    logger.test(
+      "3. Ensure .env file is not in .gitignore if you expect it to be there"
+    );
     logger.test("4. Try running from project root directory");
-    
+
     return false;
   }
-  
+
   // Test connection
   const connectionOk = await testConnection();
   if (!connectionOk) {
     logger.test("❌ Connection tests failed - stopping here");
     return false;
   }
-  
+
   // Test token generation
   const token = await testTokenGeneration();
   if (!token) {
     logger.test("❌ Token generation failed - stopping here");
     return false;
   }
-  
+
   // Test API access
   const apiAccessOk = await testApiAccess(token);
   if (!apiAccessOk) {
     logger.test("❌ API access tests failed");
     return false;
   }
-  
+
   logger.test("🎉 All tests passed successfully!");
   logger.test("=".repeat(50));
-  
+
   // Optional: Test appointment retrieval
-  const testAppointments = process.env.TEST_APPOINTMENT_RETRIEVAL === 'true';
+  const testAppointments = process.env.TEST_APPOINTMENT_RETRIEVAL === "true";
   if (testAppointments) {
     logger.test("Testing appointment retrieval (this may take a while)...");
     try {
       const appointments = await getAppointments(token, "today");
-      logger.test(`✅ Appointment retrieval test completed - Found ${appointments.length} appointments`);
+      logger.test(
+        `✅ Appointment retrieval test completed - Found ${appointments.length} appointments`
+      );
     } catch (error) {
       logger.test(`❌ Appointment retrieval test failed: ${error.message}`);
     }
   }
-  
+
   return true;
 }
 
@@ -450,65 +500,64 @@ module.exports = {
   testConnection,
   testTokenGeneration,
   testApiAccess,
-  runAllTests
+  runAllTests,
 };
 
 // Run if this is the main module
 if (require.main === module) {
   // Check command line arguments
   const args = process.argv.slice(2);
-  
-  if (args.includes('--test') || args.includes('-t')) {
+
+  if (args.includes("--test") || args.includes("-t")) {
     // Run tests
-    runAllTests().then(success => {
+    runAllTests().then((success) => {
       process.exit(success ? 0 : 1);
     });
-  } else if (args.includes('--debug-env') || args.includes('-d')) {
+  } else if (args.includes("--debug-env") || args.includes("-d")) {
     // Debug environment loading
-    console.log('🔍 Environment Debug Information:');
+    console.log("🔍 Environment Debug Information:");
     console.log(`Current working directory: ${process.cwd()}`);
     console.log(`Script location: ${__dirname}`);
-    console.log(`Environment file found: ${envFilePath || 'None'}`);
-    console.log('\nSearching for .env files in:');
-    
+    console.log(`Environment file found: ${envFilePath || "None"}`);
+    console.log("\nSearching for .env files in:");
+
     const searchPaths = [
       process.env.ENV_FILE_PATH,
       findEnvFile(__dirname),
-      path.join(process.cwd(), '.env'),
-      path.join(__dirname, '../../../..', '.env'),
-      path.join(__dirname, '../../..', '.env'),
-      path.join(__dirname, '../..', '.env'),
-      path.join(__dirname, '..', '.env'),
-      path.join(__dirname, '.env')
+      path.join(process.cwd(), ".env"),
+      path.join(__dirname, "../../../..", ".env"),
+      path.join(__dirname, "../../..", ".env"),
+      path.join(__dirname, "../..", ".env"),
+      path.join(__dirname, "..", ".env"),
+      path.join(__dirname, ".env"),
     ].filter(Boolean);
-    
-    searchPaths.forEach(envPath => {
+
+    searchPaths.forEach((envPath) => {
       try {
-        require('fs').accessSync(envPath);
+        require("fs").accessSync(envPath);
         console.log(`  ✅ ${envPath} (EXISTS)`);
       } catch {
         console.log(`  ❌ ${envPath} (NOT FOUND)`);
       }
     });
-    
-    console.log('\nEnvironment variables:');
+
+    console.log("\nEnvironment variables:");
     Object.keys(process.env)
-      .filter(key => key.startsWith('HCHB_'))
-      .forEach(key => {
-        console.log(`  ${key}: ${process.env[key] ? 'SET' : 'NOT SET'}`);
+      .filter((key) => key.startsWith("HCHB_"))
+      .forEach((key) => {
+        console.log(`  ${key}: ${process.env[key] ? "SET" : "NOT SET"}`);
       });
-      
-  } else if (args.includes('--test-token') || args.includes('-tt')) {
+  } else if (args.includes("--test-token") || args.includes("-tt")) {
     // Test token generation only
-    testTokenGeneration().then(token => {
+    testTokenGeneration().then((token) => {
       process.exit(token ? 0 : 1);
     });
-  } else if (args.includes('--test-connection') || args.includes('-tc')) {
+  } else if (args.includes("--test-connection") || args.includes("-tc")) {
     // Test connection only
-    testConnection().then(success => {
+    testConnection().then((success) => {
       process.exit(success ? 0 : 1);
     });
-  } else if (args.includes('--help') || args.includes('-h')) {
+  } else if (args.includes("--help") || args.includes("-h")) {
     // Show help
     console.log(`
 HCHB FHIR API Client
@@ -541,26 +590,26 @@ Environment Variables:
 async function getAllPatients(token, options = {}) {
   logger.info("Fetching all patients from HCHB API...");
 
-  const { 
+  const {
     batchSize = BATCH_SIZE,
     maxPatients = null,
-    includeInactive = false
+    includeInactive = false,
   } = options;
 
   const patients = [];
   let nextUrl = `${API_BASE_URL}/Patient`;
   const params = {
     _count: batchSize,
-    _sort: 'family', // Sort by last name
+    _sort: "family", // Sort by last name
   };
 
   if (!includeInactive) {
-    params.active = 'true';
+    params.active = "true";
   }
 
   const headers = {
-    "Authorization": `Bearer ${token}`,
-    "Accept": "application/fhir+json"
+    Authorization: `Bearer ${token}`,
+    Accept: "application/fhir+json",
   };
 
   try {
@@ -568,36 +617,39 @@ async function getAllPatients(token, options = {}) {
       logger.debug(`Fetching patients from: ${nextUrl}`);
 
       const response = await axios.get(nextUrl, {
-        timeout:  REQUEST_TIMEOUT,
+        timeout: REQUEST_TIMEOUT,
         headers: headers,
-        params: nextUrl === `${API_BASE_URL}/Patient` ? params : undefined
+        params: nextUrl === `${API_BASE_URL}/Patient` ? params : undefined,
       });
 
       const bundle = response.data;
 
       if (bundle.entry && bundle.entry.length > 0) {
-        const batchPatients = bundle.entry.map(entry => transformPatient(entry.resource));
+        const batchPatients = bundle.entry.map((entry) =>
+          transformPatient(entry.resource)
+        );
         patients.push(...batchPatients);
 
-        logger.info(`Fetched ${batchPatients.length} patients (total: ${patients.length})`);
+        logger.info(
+          `Fetched ${batchPatients.length} patients (total: ${patients.length})`
+        );
       }
 
       // Find next page URL
       nextUrl = null;
       if (bundle.link) {
-        const nextLink = bundle.link.find(link => link.relation === 'next');
+        const nextLink = bundle.link.find((link) => link.relation === "next");
         if (nextLink) {
           nextUrl = nextLink.url;
         }
       }
 
       //Rate Limiting
-      await sleep(100)
+      await sleep(100);
     }
 
-    logger.info(`Successfully fetched ${patients.length} patients total`)
+    logger.info(`Successfully fetched ${patients.length} patients total`);
     return patients;
-
   } catch (error) {
     logger.error(`Error fetching patinets: ${error.message}`, error);
     throw error;
@@ -610,8 +662,8 @@ async function getAppointments(token, dateFilter = "today", options = {}) {
 
   const {
     batchSize = BATCH_SIZE,
-    maxAppointments = null, 
-    status = null // 'booked', 'arrived', 'fulfilled', etc.
+    maxAppointments = null,
+    status = null, // 'booked', 'arrived', 'fulfilled', etc.
   } = options;
 
   const appointments = [];
@@ -619,62 +671,71 @@ async function getAppointments(token, dateFilter = "today", options = {}) {
 
   const params = {
     _count: batchSize,
-    _sort: 'date'
+    _sort: "date",
   };
 
   if (dateFilter === "today") {
-    const today = new Date().toISOString().split('T')[0];
-    params.date = `ge${today}&date=lt${getNextDat(today)}`;
+    const today = new Date().toISOString().split("T")[0];
+    params.date = `ge${today}&date=lt${getNextDay(today)}`;
   } else if (dateFilter === "week") {
     const startOfWeek = getStartOfWeek();
     const endOfWeek = getEndOfWeek();
-    params.data = `ge${startOfWeek}&date=le${endOfWeek}`;
-  } else if (dateFilter.includes('-')) {
-    params.date = `ge${dateFilter}&date=lt${getNextDat(dateFilter)}`;
+    params.date = `ge${startOfWeek}&date=le${endOfWeek}`;
+  } else if (dateFilter.includes("-")) {
+    params.date = `ge${dateFilter}&date=lt${getNextDay(dateFilter)}`;
   }
 
   if (status) {
-     params.status = status;
+    params.status = status;
   }
 
   const headers = {
-    "Authorization": `Bearer ${token}`,
-    "Accept": "application/fhir+json"
+    Authorization: `Bearer ${token}`,
+    Accept: "application/fhir+json",
   };
 
   try {
-    while (nextUrl && (!maxAppointments || appointments.length < maxAppointments)) {
+    while (
+      nextUrl &&
+      (!maxAppointments || appointments.length < maxAppointments)
+    ) {
       logger.debug(`Fetching appointments from: ${nextUrl}`);
 
       const response = await axios.get(nextUrl, {
         timeout: REQUEST_TIMEOUT,
         headers: headers,
-        params: nextUrl === `${API_BASE_URL}/Appointment` ? params : undefined
+        params: nextUrl === `${API_BASE_URL}/Appointment` ? params : undefined,
       });
 
       const bundle = response.data;
 
       if (bundle.entry && bundle.entry.length > 0) {
-        const batchAppointments = bundle.entry.map(entry => transformAppointment(entry.resource));
+        const batchAppointments = bundle.entry.map((entry) =>
+          transformAppointment(entry.resource)
+        );
         appointments.push(...batchAppointments);
 
-        logger.info(`Fetched ${batchAppointments.length} appointments (total: ${appointments.length})`);
+        logger.info(
+          `Fetched ${batchAppointments.length} appointments (total: ${appointments.length})`
+        );
       }
 
       // Find next page URL
       nextUrl = null;
       if (bundle.link) {
-        const nextLink = bundle.link.find(link => link.relation === 'next');
+        const nextLink = bundle.link.find((link) => link.relation === "next");
         if (nextLink) {
           nextUrl = nextLink.url;
         }
       }
 
       // Rate Limiting
-      await sleep(100)
+      await sleep(100);
     }
 
-    logger.info(`Successfully fetched ${appointments.length} appointments total`);
+    logger.info(
+      `Successfully fetched ${appointments.length} appointments total`
+    );
     return appointments;
   } catch (error) {
     logger.error(`Error fetching appointments: ${error.message}`, error);
@@ -682,7 +743,7 @@ async function getAppointments(token, dateFilter = "today", options = {}) {
   }
 }
 
-// Fetch Practitioners 
+// Fetch Practitioners
 async function getAllPractitioners(token, options = {}) {
   logger.info("Fetching all practitioners from HCHB API...");
 
@@ -692,58 +753,66 @@ async function getAllPractitioners(token, options = {}) {
     specialty = null,
   } = options;
 
-const practitioners = [];
-let nextUrl = `${API_BASE_URL}/Practitioner`;
-const params = {
-  _count: batchSize,
-  _sort: 'family',
-  active: 'true'
-};
-
-if (specialty) {
-  params['qualification.code'] = specialty;
-}
-
-const headers = {
-    "Authorization": `Bearer ${token}`,
-    "Accept": "application/fhir+json"
+  const practitioners = [];
+  let nextUrl = `${API_BASE_URL}/Practitioner`;
+  const params = {
+    _count: batchSize,
+    _sort: "family",
+    active: "true",
   };
-  
+
+  if (specialty) {
+    params["qualification.code"] = specialty;
+  }
+
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/fhir+json",
+  };
+
   try {
-    while (nextUrl && (!maxPractitioners || practitioners.length < maxPractitioners)) {
+    while (
+      nextUrl &&
+      (!maxPractitioners || practitioners.length < maxPractitioners)
+    ) {
       logger.debug(`Fetching practitioners from: ${nextUrl}`);
-      
+
       const response = await axios.get(nextUrl, {
         timeout: REQUEST_TIMEOUT,
         headers: headers,
-        params: nextUrl === `${API_BASE_URL}/Practitioner` ? params : undefined
+        params: nextUrl === `${API_BASE_URL}/Practitioner` ? params : undefined,
       });
-      
+
       const bundle = response.data;
-      
+
       if (bundle.entry && bundle.entry.length > 0) {
-        const batchPractitioners = bundle.entry.map(entry => transformPractitioner(entry.resource));
+        const batchPractitioners = bundle.entry.map((entry) =>
+          transformPractitioner(entry.resource)
+        );
         practitioners.push(...batchPractitioners);
-        
-        logger.info(`Fetched ${batchPractitioners.length} practitioners (total: ${practitioners.length})`);
+
+        logger.info(
+          `Fetched ${batchPractitioners.length} practitioners (total: ${practitioners.length})`
+        );
       }
-      
+
       // Find next page URL
       nextUrl = null;
       if (bundle.link) {
-        const nextLink = bundle.link.find(link => link.relation === 'next');
+        const nextLink = bundle.link.find((link) => link.relation === "next");
         if (nextLink) {
           nextUrl = nextLink.url;
         }
       }
-      
+
       // Rate limiting
       await sleep(100);
     }
-    
-    logger.info(`Successfully fetched ${practitioners.length} practitioners total`);
+
+    logger.info(
+      `Successfully fetched ${practitioners.length} practitioners total`
+    );
     return practitioners;
-    
   } catch (error) {
     logger.error(`Error fetching practitioners: ${error.message}`, error);
     throw error;
@@ -756,19 +825,19 @@ const headers = {
 function transformPatient(fhirPatient) {
   return {
     id: fhirPatient.id,
-    resourceType: 'Patient',
+    resourceType: "Patient",
     name: formatHumanName(fhirPatient.name?.[0]),
     active: fhirPatient.active,
     gender: fhirPatient.gender,
     birthDate: fhirPatient.birthDate,
     address: fhirPatient.address?.[0] || null,
     telecom: fhirPatient.telecom || [],
-    phoneNumber: getContactValue(fhirPatient.telecom, 'phone'),
-    email: getContactValue(fhirPatient.telecom, 'email'),
+    phoneNumber: getContactValue(fhirPatient.telecom, "phone"),
+    email: getContactValue(fhirPatient.telecom, "email"),
     // Extract care needs from extensions if available
     careNeeds: extractCareNeeds(fhirPatient.extension),
     // Raw FHIR data for reference
-    _raw: fhirPatient
+    _raw: fhirPatient,
   };
 }
 
@@ -777,28 +846,36 @@ function transformPatient(fhirPatient) {
  */
 function transformAppointment(fhirAppointment) {
   const participants = fhirAppointment.participant || [];
-  
+
   return {
     id: fhirAppointment.id,
-    resourceType: 'Appointment',
+    resourceType: "Appointment",
     status: fhirAppointment.status,
     start: fhirAppointment.start,
     end: fhirAppointment.end,
     serviceType: fhirAppointment.serviceType || [],
-    participants: participants.map(p => ({
+    participants: participants.map((p) => ({
       actor: p.actor,
       status: p.status,
-      type: p.type
+      type: p.type,
     })),
     // Extract patient and practitioner references
-    patientRef: participants.find(p => p.actor?.reference?.startsWith('Patient/'))?.actor?.reference,
-    practitionerRef: participants.find(p => p.actor?.reference?.startsWith('Practitioner/'))?.actor?.reference,
-    patientId: participants.find(p => p.actor?.reference?.startsWith('Patient/'))?.actor?.reference?.replace('Patient/', ''),
-    practitionerId: participants.find(p => p.actor?.reference?.startsWith('Practitioner/'))?.actor?.reference?.replace('Practitioner/', ''),
+    patientRef: participants.find((p) =>
+      p.actor?.reference?.startsWith("Patient/")
+    )?.actor?.reference,
+    practitionerRef: participants.find((p) =>
+      p.actor?.reference?.startsWith("Practitioner/")
+    )?.actor?.reference,
+    patientId: participants
+      .find((p) => p.actor?.reference?.startsWith("Patient/"))
+      ?.actor?.reference?.replace("Patient/", ""),
+    practitionerId: participants
+      .find((p) => p.actor?.reference?.startsWith("Practitioner/"))
+      ?.actor?.reference?.replace("Practitioner/", ""),
     comment: fhirAppointment.comment,
     description: fhirAppointment.description,
     // Raw FHIR data for reference
-    _raw: fhirAppointment
+    _raw: fhirAppointment,
   };
 }
 
@@ -808,18 +885,18 @@ function transformAppointment(fhirAppointment) {
 function transformPractitioner(fhirPractitioner) {
   return {
     id: fhirPractitioner.id,
-    resourceType: 'Practitioner',
+    resourceType: "Practitioner",
     name: formatHumanName(fhirPractitioner.name?.[0]),
     active: fhirPractitioner.active,
     gender: fhirPractitioner.gender,
     birthDate: fhirPractitioner.birthDate,
     telecom: fhirPractitioner.telecom || [],
-    phoneNumber: getContactValue(fhirPractitioner.telecom, 'phone'),
-    email: getContactValue(fhirPractitioner.telecom, 'email'),
+    phoneNumber: getContactValue(fhirPractitioner.telecom, "phone"),
+    email: getContactValue(fhirPractitioner.telecom, "email"),
     qualification: fhirPractitioner.qualification || [],
     specialty: extractSpecialty(fhirPractitioner.qualification),
     // Raw FHIR data for reference
-    _raw: fhirPractitioner
+    _raw: fhirPractitioner,
   };
 }
 
@@ -827,24 +904,27 @@ function transformPractitioner(fhirPractitioner) {
  * Save data to JSON files for development/debugging
  */
 async function saveDataToFiles(data, dataType) {
-  const outputDir = path.join(__dirname, '../../../data');
-  
+  const outputDir = path.join(__dirname, "../../../data");
+
   // Create data directory if it doesn't exist
   try {
     await fs.mkdir(outputDir, { recursive: true });
   } catch (error) {
     // Directory might already exist
   }
-  
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const filename = `${dataType}_${timestamp}.json`;
   const filepath = path.join(outputDir, filename);
-  
+
   try {
     await fs.writeFile(filepath, JSON.stringify(data, null, 2));
     logger.info(`Saved ${data.length} ${dataType} records to: ${filepath}`);
   } catch (error) {
-    logger.error(`Error saving ${dataType} data to file: ${error.message}`, error);
+    logger.error(
+      `Error saving ${dataType} data to file: ${error.message}`,
+      error
+    );
   }
 }
 
@@ -853,31 +933,35 @@ async function saveDataToFiles(data, dataType) {
  */
 async function syncAllData() {
   logger.info("🔄 Starting complete data sync from HCHB...");
-  
+
   try {
     // Get authentication token
     const token = await getHchbToken();
-    
+
     // Fetch all data types
     logger.info("📋 Fetching patients...");
     const patients = await getAllPatients(token, { maxPatients: 100 }); // Limit for testing
-    await saveDataToFiles(patients, 'patients');
-    
+    await saveDataToFiles(patients, "patients");
+
     logger.info("👩‍⚕️ Fetching practitioners...");
-    const practitioners = await getAllPractitioners(token, { maxPractitioners: 50 });
-    await saveDataToFiles(practitioners, 'practitioners');
-    
+    const practitioners = await getAllPractitioners(token, {
+      maxPractitioners: 50,
+    });
+    await saveDataToFiles(practitioners, "practitioners");
+
     logger.info("📅 Fetching appointments...");
-    const appointments = await getAppointments(token, "week", { maxAppointments: 200 });
-    await saveDataToFiles(appointments, 'appointments');
-    
+    const appointments = await getAppointments(token, "week", {
+      maxAppointments: 200,
+    });
+    await saveDataToFiles(appointments, "appointments");
+
     // Summary
     logger.info("✅ Data sync completed successfully!");
     logger.info(`📊 Summary:`);
     logger.info(`   Patients: ${patients.length}`);
     logger.info(`   Practitioners: ${practitioners.length}`);
     logger.info(`   Appointments: ${appointments.length}`);
-    
+
     return {
       patients,
       practitioners,
@@ -886,10 +970,9 @@ async function syncAllData() {
         patientCount: patients.length,
         practitionerCount: practitioners.length,
         appointmentCount: appointments.length,
-        syncTime: new Date().toISOString()
-      }
+        syncTime: new Date().toISOString(),
+      },
     };
-    
   } catch (error) {
     logger.error("❌ Data sync failed", error);
     throw error;
@@ -908,7 +991,7 @@ function formatHumanName(name) {
 
 function getContactValue(telecom, system) {
   if (!telecom || !telecom.length) return null;
-  const contact = telecom.find(t => t.system === system);
+  const contact = telecom.find((t) => t.system === system);
   return contact?.value;
 }
 
@@ -920,27 +1003,30 @@ function extractCareNeeds(extensions) {
 
 function extractSpecialty(qualifications) {
   if (!qualifications || !qualifications.length) return null;
-  return qualifications[0]?.code?.text || qualifications[0]?.code?.coding?.[0]?.display;
+  return (
+    qualifications[0]?.code?.text ||
+    qualifications[0]?.code?.coding?.[0]?.display
+  );
 }
 
 function getNextDay(dateString) {
   const date = new Date(dateString);
   date.setDate(date.getDate() + 1);
-  return date.toISOString().split('T')[0];
+  return date.toISOString().split("T")[0];
 }
 
 function getStartOfWeek() {
   const today = new Date();
   const day = today.getDay();
   const diff = today.getDate() - day;
-  return new Date(today.setDate(diff)).toISOString().split('T')[0];
+  return new Date(today.setDate(diff)).toISOString().split("T")[0];
 }
 
 function getEndOfWeek() {
   const today = new Date();
   const day = today.getDay();
   const diff = today.getDate() - day + 6;
-  return new Date(today.setDate(diff)).toISOString().split('T')[0];
+  return new Date(today.setDate(diff)).toISOString().split("T")[0];
 }
 
 // Export new functions
@@ -952,46 +1038,50 @@ module.exports = {
   syncAllData,
   transformPatient,
   transformAppointment,
-  transformPractitioner
+  transformPractitioner,
 };
 
 // Update the main module check
 if (require.main === module) {
   const args = process.argv.slice(2);
-  
-  if (args.includes('--sync') || args.includes('-s')) {
+
+  if (args.includes("--sync") || args.includes("-s")) {
     // Run full data sync
-    syncAllData().then(result => {
-      console.log("Data sync completed!");
-      process.exit(0);
-    }).catch(error => {
-      console.error("Data sync failed:", error.message);
-      process.exit(1);
-    });
-  } else if (args.includes('--patients') || args.includes('-p')) {
+    syncAllData()
+      .then((result) => {
+        console.log("Data sync completed!");
+        process.exit(0);
+      })
+      .catch((error) => {
+        console.error("Data sync failed:", error.message);
+        process.exit(1);
+      });
+  } else if (args.includes("--patients") || args.includes("-p")) {
     // Sync patients only
-    getHchbToken().then(token => 
-      getAllPatients(token)
-    ).then(patients => {
-      console.log(`Fetched ${patients.length} patients`);
-      saveDataToFiles(patients, 'patients');
-      process.exit(0);
-    }).catch(error => {
-      console.error("Patient sync failed:", error.message);
-      process.exit(1);
-    });
-  } else if (args.includes('--appointments') || args.includes('-a')) {
+    getHchbToken()
+      .then((token) => getAllPatients(token))
+      .then((patients) => {
+        console.log(`Fetched ${patients.length} patients`);
+        saveDataToFiles(patients, "patients");
+        process.exit(0);
+      })
+      .catch((error) => {
+        console.error("Patient sync failed:", error.message);
+        process.exit(1);
+      });
+  } else if (args.includes("--appointments") || args.includes("-a")) {
     // Sync appointments only
-    getHchbToken().then(token => 
-      getAppointments(token, "today")
-    ).then(appointments => {
-      console.log(`Fetched ${appointments.length} appointments`);
-      saveDataToFiles(appointments, 'appointments');
-      process.exit(0);
-    }).catch(error => {
-      console.error("Appointment sync failed:", error.message);
-      process.exit(1);
-    });
+    getHchbToken()
+      .then((token) => getAppointments(token, "today"))
+      .then((appointments) => {
+        console.log(`Fetched ${appointments.length} appointments`);
+        saveDataToFiles(appointments, "appointments");
+        process.exit(0);
+      })
+      .catch((error) => {
+        console.error("Appointment sync failed:", error.message);
+        process.exit(1);
+      });
   }
   // ... keep existing test commands
 }
