@@ -158,7 +158,7 @@ const logger = {
 /**
  * Get HCHB API bearer token
  */
-async function getHchbToken() {
+async function getToken() {
   logger.info("Requesting a new HCHB API token...");
   logger.debug("Token request details", {
     tokenUrl: TOKEN_URL,
@@ -311,7 +311,7 @@ async function testTokenGeneration() {
   logger.test("Testing token generation...");
 
   try {
-    const token = await getHchbToken();
+    const token = await getToken();
     logger.test(
       `✅ Token generation successful - Length: ${token.length} characters`
     );
@@ -485,7 +485,7 @@ async function runAllTests() {
 async function main() {
   logger.info("Running HCHB FHIR sync...");
   try {
-    const token = await getHchbToken();
+    const token = await getToken();
     logger.info("Sync completed successfully");
   } catch (error) {
     logger.error("Sync failed", error);
@@ -494,7 +494,7 @@ async function main() {
 
 // Export functions for potential use as a module
 module.exports = {
-  getHchbToken,
+  getToken,
   main,
   // Test functions
   testConnection,
@@ -563,22 +563,22 @@ if (require.main === module) {
 HCHB FHIR API Client
 
 Usage:
-  node HCHBservice.js                 Run the full appointment sync
-  node HCHBservice.js --test          Run all tests
-  node HCHBservice.js --debug-env     Debug environment variable loading
-  node HCHBservice.js --test-token    Test token generation only
-  node HCHBservice.js --test-connection Test endpoint connectivity only
-  node HCHBservice.js --help          Show this help
+  node service.js                 Run the full appointment sync
+  node service.js --test          Run all tests
+  node service.js --debug-env     Debug environment variable loading
+  node service.js --test-token    Test token generation only
+  node service.js --test-connection Test endpoint connectivity only
+  node service.js --help          Show this help
 
 Environment Variables:
   LOG_LEVEL                      Set to DEBUG for verbose logging
   TEST_APPOINTMENT_RETRIEVAL     Set to true to test appointment retrieval in tests
   ENV_FILE_PATH                  Specify custom path to .env file
-  HCHB_CLIENT_ID                 Your HCHB client ID (required)
-  HCHB_RESOURCE_SECURITY_ID      Your resource security ID (required)
-  HCHB_AGENCY_SECRET             Your agency secret (required)
-  HCHB_TOKEN_URL                 Token endpoint URL (required)
-  HCHB_API_BASE_URL              FHIR API base URL (required)
+  CLIENT_ID                 Your HCHB client ID (required)
+  RESOURCE_SECURITY_ID      Your resource security ID (required)
+  AGENCY_SECRET             Your agency secret (required)
+  TOKEN_URL                 Token endpoint URL (required)
+  API_BASE_URL              FHIR API base URL (required)
     `);
   } else {
     // Run main function
@@ -823,20 +823,102 @@ async function getAllPractitioners(token, options = {}) {
  * Transform FHIR Patient to our internal format
  */
 function transformPatient(fhirPatient) {
+  let name = "";
+  if (fhirPatient.name && fhirPatient.name.length > 0) {
+    const officialName =
+      fhirPatient.name.find((n) => n.use === "official") || fhirPatient.name[0];
+    if (officialName) {
+      const parts = [];
+      if (officialName.given) parts.push(...officialName.given);
+      if (officialName.family) parts.push(officialName.family);
+      name = parts.join(" ");
+    }
+  }
+
+  let phoneNumber = null;
+  let email = null;
+
+  if (fhirPatient.telecom) {
+    // Look for mobile first, then home
+    const mobile = fhirPatient.telecom.find(
+      (t) => t.system === "phone" && t.use === "mobile" && t.value
+    );
+    const home = fhirPatient.telecom.find(
+      (t) => t.system === "phone" && t.use === "home" && t.value
+    );
+    phoneNumber = mobile?.value || home?.value;
+
+    const emailContact = fhirPatient.telecom.find(
+      (t) => t.system === "email" && t.value
+    );
+    email = emailContact?.value;
+  }
+
+  const careNeeds = [];
+  if (fhirPatient.extension) {
+    // Look for diagnosis extension
+    const diagnosisExt = fhirePatient.extension.find(
+      (ext) => ext.url === "serviceCode"
+    );
+    if (serviceCodeExt?.valueString) {
+      careNeeds.push(`Service: ${serviceCodeExt.valueString}`);
+    }
+
+    //Look for Diet
+    const dietExt = fhirPatient.extension.find((ext) => ext.url === "diet");
+    if (dietExt?.valueString) {
+      careNeeds.push(`Diet: ${dietExt.valueString}`);
+    }
+  }
+
+  let medicalNotes = null;
+  const infoExt = fhirPatient.extension?.find(
+    (ext) => ext.url === "information"
+  );
+  if (infoExt?.valueString) {
+    medicalNotes = infoExt.valueString;
+  }
+
+  let address = null;
+  if (fhirPatient.address && fhirPatient.address.length > 0) {
+    const homeAddress =
+      fhirPatient.address.find((a) => a.use === "home") ||
+      fhirPatient.address[0];
+    if (homeAddress) {
+      const parts = [];
+      if (homeAddress.line) parts.push(...homeAddress.line);
+      if (homeAddress.city) parts.push(...homeAddress.city);
+      if (homeAddress.state) parts.push(...homeAddress.state);
+      if (homeAddress.postalCode) parts.push(...homeAddress.postalCode);
+      address = parts.join(", ");
+    }
+  }
+
   return {
-    id: fhirPatient.id,
+    if: fhirPatient.id,
     resourceType: "Patient",
-    name: formatHumanName(fhirPatient.name?.[0]),
+    name: name,
     active: fhirPatient.active,
-    gender: fhirPatient.gender,
-    birthDate: fhirPatient.birthDate,
-    address: fhirPatient.address?.[0] || null,
-    telecom: fhirPatient.telecom || [],
-    phoneNumber: getContactValue(fhirPatient.telecom, "phone"),
-    email: getContactValue(fhirPatient.telecom, "email"),
-    // Extract care needs from extensions if available
-    careNeeds: extractCareNeeds(fhirPatient.extension),
-    // Raw FHIR data for reference
+    gender: fhirePatient.gender,
+    birthDate: fhirePatient.birthDate,
+    address: address,
+    telecom: fhirePatient.telecom || [],
+    phoneNumber: phoneNumber,
+    email: email,
+    careNeeds: careNeeds,
+    medicalNotes: medicalNotes,
+    // Extract additional useful info from extensions
+    episodeStatus: fhirPatient.extension?.find(
+      (ext) => ext.url === "episodestatus"
+    )?.valueString,
+    admissionType: fhirPatient.extension?.find(
+      (ext) =>
+        ext.url ===
+        "https://api.hchb.com/fhir/r4/StructureDefinition/admission-type"
+    )?.valueString,
+    managingOrganization: fhirPatient.managingOrganization,
+    generalPractitioner: fhirPatient.generalPractitioner,
+    // Raw data for reference
     _raw: fhirPatient,
   };
 }
@@ -845,35 +927,102 @@ function transformPatient(fhirPatient) {
  * Transform FHIR Appointment to our internal format
  */
 function transformAppointment(fhirAppointment) {
+  // Extract date/time from extensions
+  const dateTimeExt = fhirAppointment.extension?.find(
+    (ext) =>
+      ext.url ===
+      "https://api.hchb.com/fhir/r4/StructureDefinition/appointment-date-time"
+  );
+
+  let appointmentDate = null;
+  let startTime = null;
+  let endTime = null;
+
+  if (dateTimeExt?.extension) {
+    const dateExt = dateTimeExt.extension.find(
+      (e) => e.url === "AppointmentDate"
+    );
+    const startExt = dateTimeExt.extension.find(
+      (e) => e.url === "AppointmentStartTime"
+    );
+    const endExt = dateTimeExt.extension.find(
+      (e) => e.url === "AppointmentEndTime"
+    );
+
+    appointmentDate = dateExt?.valueString;
+
+    // Extract time from the datetime strings (format: "1900-01-01T11:08:16.000+00:00")
+    if (startExt?.valueString) {
+      const timeMatch = startExt.valueString.match(/T(\d{2}:\d{2}:\d{2})/);
+      if (timeMatch && appointmentDate) {
+        startTime = `${appointmentDate}T${timeMatch[1]}Z`;
+      }
+    }
+
+    if (endExt?.valueString) {
+      const timeMatch = endExt.valueString.match(/T(\d{2}:\d{2}:\d{2})/);
+      if (timeMatch && appointmentDate) {
+        endTime = `${appointmentDate}T${timeMatch[1]}Z`;
+      }
+    }
+  }
+
+  // Fallback to requestedPeriod if available
+  if (!startTime && fhirAppointment.requestedPeriod?.[0]) {
+    startTime = fhirAppointment.requestedPeriod[0].start;
+    endTime = fhirAppointment.requestedPeriod[0].end;
+  }
+
+  // Extract patient reference from extension
+  const subjectExt = fhirAppointment.extension?.find(
+    (ext) =>
+      ext.url === "https://api.hchb.com/fhir/r4/StructureDefinition/subject"
+  );
+  const patientRef = subjectExt?.valueReference?.reference;
+  const patientId = patientRef?.replace("Patient/", "");
+
+  // Extract practitioner from participants
   const participants = fhirAppointment.participant || [];
+  const practitionerParticipant = participants.find((p) =>
+    p.actor?.reference?.startsWith("Practitioner/")
+  );
+  const practitionerRef = practitionerParticipant?.actor?.reference;
+  const practitionerId = practitionerRef?.replace("Practitioner/", "");
+
+  // Extract service type display
+  let serviceTypeDisplay = null;
+  if (fhirAppointment.serviceType && fhirAppointment.serviceType.length > 0) {
+    const serviceType = fhirAppointment.serviceType[0];
+    if (serviceType.coding && serviceType.coding.length > 0) {
+      serviceTypeDisplay =
+        serviceType.coding[0].display || serviceType.coding[0].code;
+    }
+  }
 
   return {
     id: fhirAppointment.id,
     resourceType: "Appointment",
     status: fhirAppointment.status,
-    start: fhirAppointment.start,
-    end: fhirAppointment.end,
+    start: startTime,
+    end: endTime,
+    date: appointmentDate,
     serviceType: fhirAppointment.serviceType || [],
+    serviceTypeDisplay: serviceTypeDisplay,
+    appointmentType: fhirAppointment.appointmentType,
+    specialty: fhirAppointment.specialty,
     participants: participants.map((p) => ({
       actor: p.actor,
       status: p.status,
       type: p.type,
     })),
-    // Extract patient and practitioner references
-    patientRef: participants.find((p) =>
-      p.actor?.reference?.startsWith("Patient/")
-    )?.actor?.reference,
-    practitionerRef: participants.find((p) =>
-      p.actor?.reference?.startsWith("Practitioner/")
-    )?.actor?.reference,
-    patientId: participants
-      .find((p) => p.actor?.reference?.startsWith("Patient/"))
-      ?.actor?.reference?.replace("Patient/", ""),
-    practitionerId: participants
-      .find((p) => p.actor?.reference?.startsWith("Practitioner/"))
-      ?.actor?.reference?.replace("Practitioner/", ""),
+    patientRef,
+    practitionerRef,
+    patientId,
+    practitionerId,
     comment: fhirAppointment.comment,
     description: fhirAppointment.description,
+    created: fhirAppointment.created,
+    supportingInformation: fhirAppointment.supportingInformation,
     // Raw FHIR data for reference
     _raw: fhirAppointment,
   };
@@ -883,18 +1032,109 @@ function transformAppointment(fhirAppointment) {
  * Transform FHIR Practitioner to our internal format
  */
 function transformPractitioner(fhirPractitioner) {
+  // Extract name
+  let name = "";
+  if (fhirPractitioner.name && fhirPractitioner.name.length > 0) {
+    const usualName =
+      fhirPractitioner.name.find((n) => n.use === "usual") ||
+      fhirPractitioner.name[0];
+    if (usualName) {
+      if (usualName.text) {
+        name = usualName.text;
+      } else {
+        const parts = [];
+        if (usualName.given) parts.push(...usualName.given);
+        if (usualName.family) parts.push(usualName.family);
+        name = parts.join(" ");
+      }
+    }
+  }
+
+  // Extract phone and email
+  let phoneNumber = null;
+  let email = null;
+
+  if (fhirPractitioner.telecom) {
+    // Look for mobile first, then work, then home
+    const mobile = fhirPractitioner.telecom.find(
+      (t) => t.system === "phone" && t.use === "mobile" && t.value
+    );
+    const work = fhirPractitioner.telecom.find(
+      (t) => t.system === "phone" && t.use === "work" && t.value
+    );
+    const home = fhirPractitioner.telecom.find(
+      (t) => t.system === "phone" && t.use === "home" && t.value
+    );
+    phoneNumber = mobile?.value || work?.value || home?.value;
+
+    const emailContact = fhirPractitioner.telecom.find(
+      (t) => t.system === "email" && t.value
+    );
+    email = emailContact?.value;
+  }
+
+  // Extract specialty/qualification
+  let specialty = null;
+  let title = null;
+  if (
+    fhirPractitioner.qualification &&
+    fhirPractitioner.qualification.length > 0
+  ) {
+    const primaryQual = fhirPractitioner.qualification[0];
+    if (primaryQual.code?.text) {
+      specialty = primaryQual.code.text;
+      title = primaryQual.code.text; // Use qualification as title
+    }
+  }
+
+  // Extract home branch from extensions
+  let homeBranch = null;
+  const practitionerDetailsExt = fhirPractitioner.extension?.find(
+    (ext) =>
+      ext.url ===
+      "https://api.hchb.com/fhir/r4/StructureDefinition/practitioner-details"
+  );
+  if (practitionerDetailsExt?.extension) {
+    const homeBranchExt = practitionerDetailsExt.extension.find(
+      (e) => e.url === "HomeBranch"
+    );
+    if (homeBranchExt?.valueReference) {
+      homeBranch = {
+        reference: homeBranchExt.valueReference.reference,
+        display: homeBranchExt.valueReference.display,
+      };
+    }
+  }
+
+  // Extract address for location
+  let address = null;
+  if (fhirPractitioner.address && fhirPractitioner.address.length > 0) {
+    const homeAddress = fhirPractitioner.address[0];
+    if (homeAddress) {
+      const parts = [];
+      if (homeAddress.line) parts.push(...homeAddress.line);
+      if (homeAddress.city) parts.push(homeAddress.city);
+      if (homeAddress.state) parts.push(homeAddress.state);
+      if (homeAddress.postalCode) parts.push(homeAddress.postalCode);
+      address = parts.join(", ");
+    }
+  }
+
   return {
     id: fhirPractitioner.id,
     resourceType: "Practitioner",
-    name: formatHumanName(fhirPractitioner.name?.[0]),
+    name: name,
     active: fhirPractitioner.active,
     gender: fhirPractitioner.gender,
     birthDate: fhirPractitioner.birthDate,
     telecom: fhirPractitioner.telecom || [],
-    phoneNumber: getContactValue(fhirPractitioner.telecom, "phone"),
-    email: getContactValue(fhirPractitioner.telecom, "email"),
+    phoneNumber: phoneNumber,
+    email: email,
     qualification: fhirPractitioner.qualification || [],
-    specialty: extractSpecialty(fhirPractitioner.qualification),
+    specialty: specialty,
+    title: title || "Healthcare Professional",
+    address: address,
+    homeBranch: homeBranch,
     // Raw FHIR data for reference
     _raw: fhirPractitioner,
   };
@@ -936,7 +1176,7 @@ async function syncAllData() {
 
   try {
     // Get authentication token
-    const token = await getHchbToken();
+    const token = await getToken();
 
     // Fetch all data types
     logger.info("📋 Fetching patients...");
@@ -1031,14 +1271,31 @@ function getEndOfWeek() {
 
 // Export new functions
 module.exports = {
-  // ... existing exports
+  // Authentication
+  getToken,
+
+  // Data fetching functions
   getAllPatients,
   getAppointments,
   getAllPractitioners,
   syncAllData,
+
+  // Transformation functions
   transformPatient,
   transformAppointment,
   transformPractitioner,
+
+  // Test functions (optional, but useful for debugging)
+  testConnection,
+  testTokenGeneration,
+  testApiAccess,
+  runAllTests,
+
+  // Helper functions that might be needed
+  formatHumanName,
+  getContactValue,
+  extractCareNeeds,
+  extractSpecialty,
 };
 
 // Update the main module check
@@ -1058,7 +1315,7 @@ if (require.main === module) {
       });
   } else if (args.includes("--patients") || args.includes("-p")) {
     // Sync patients only
-    getHchbToken()
+    getToken()
       .then((token) => getAllPatients(token))
       .then((patients) => {
         console.log(`Fetched ${patients.length} patients`);
@@ -1071,7 +1328,7 @@ if (require.main === module) {
       });
   } else if (args.includes("--appointments") || args.includes("-a")) {
     // Sync appointments only
-    getHchbToken()
+    getToken()
       .then((token) => getAppointments(token, "today"))
       .then((appointments) => {
         console.log(`Fetched ${appointments.length} appointments`);
