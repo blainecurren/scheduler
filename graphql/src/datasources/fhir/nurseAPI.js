@@ -1,4 +1,5 @@
-// graphql/src/datasources/fhir/HCHBNurseAPI.js
+// graphql/src/datasources/fhir/nurseAPI.js
+// FIXED VERSION - Parse JSON response from RESTDataSource
 const { RESTDataSource } = require("apollo-datasource-rest");
 const { getToken, transformPractitioner } = require("./service.js");
 
@@ -32,15 +33,13 @@ class nurseAPI extends RESTDataSource {
 
   async getNurses() {
     try {
-      const token = await this.getAuthToken();
+      const token = await this.getToken();
 
       console.log("[HCHBNurseAPI] Fetching all nurses...");
 
       const nurses = [];
       let nextUrl = `${this.baseURL}/Practitioner`;
 
-      // HCHB might use specific tags or qualifications to identify nurses
-      // We'll search for all practitioners and filter
       const params = {
         _count: 50,
         _sort: "family",
@@ -58,11 +57,22 @@ class nurseAPI extends RESTDataSource {
           }
         );
 
-        if (response.entry && response.entry.length > 0) {
+        // FIXED: Parse the response if it's a string
+        let parsedResponse = response;
+        if (typeof response === "string") {
+          try {
+            parsedResponse = JSON.parse(response);
+          } catch (error) {
+            console.error("[HCHBNurseAPI] Failed to parse response:", error);
+            throw new Error("Invalid JSON response from FHIR server");
+          }
+        }
+
+        if (parsedResponse.entry && parsedResponse.entry.length > 0) {
           // Transform FHIR Practitioners to our Nurse format
-          const batchNurses = response.entry
+          const batchNurses = parsedResponse.entry
             .map((entry) => this.transformToNurse(entry.resource))
-            .filter((nurse) => nurse !== null); // Filter out non-nurses if needed
+            .filter((nurse) => nurse !== null);
 
           nurses.push(...batchNurses);
           console.log(
@@ -72,11 +82,11 @@ class nurseAPI extends RESTDataSource {
 
         // Find next page URL
         nextUrl = null;
-        if (response.link) {
-          const nextLink = response.link.find(
+        if (parsedResponse.link && Array.isArray(parsedResponse.link)) {
+          const nextLink = parsedResponse.link.find(
             (link) => link.relation === "next"
           );
-          if (nextLink) {
+          if (nextLink && nextLink.url) {
             nextUrl = nextLink.url;
           }
         }
@@ -94,7 +104,7 @@ class nurseAPI extends RESTDataSource {
 
   async getNurseById(id) {
     try {
-      const token = await this.getAuthToken();
+      const token = await this.getToken();
 
       console.log(`[HCHBNurseAPI] Fetching nurse with ID: ${id}`);
 
@@ -104,7 +114,13 @@ class nurseAPI extends RESTDataSource {
         },
       });
 
-      return this.transformToNurse(response);
+      // FIXED: Parse if string
+      let parsedResponse = response;
+      if (typeof response === "string") {
+        parsedResponse = JSON.parse(response);
+      }
+
+      return this.transformToNurse(parsedResponse);
     } catch (error) {
       console.error(`[HCHBNurseAPI] Error fetching nurse ${id}:`, error);
       throw error;
@@ -113,7 +129,7 @@ class nurseAPI extends RESTDataSource {
 
   async getNursesBySpecialty(specialty) {
     try {
-      const token = await this.getAuthToken();
+      const token = await this.getToken();
 
       console.log(
         `[HCHBNurseAPI] Fetching nurses with specialty: ${specialty}`
@@ -124,7 +140,7 @@ class nurseAPI extends RESTDataSource {
 
       const params = {
         _count: 50,
-        "qualification-code": specialty, // FHIR search parameter for qualification
+        "qualification-code": specialty,
         active: "true",
       };
 
@@ -139,8 +155,14 @@ class nurseAPI extends RESTDataSource {
           }
         );
 
-        if (response.entry && response.entry.length > 0) {
-          const batchNurses = response.entry
+        // FIXED: Parse if string
+        let parsedResponse = response;
+        if (typeof response === "string") {
+          parsedResponse = JSON.parse(response);
+        }
+
+        if (parsedResponse.entry && parsedResponse.entry.length > 0) {
+          const batchNurses = parsedResponse.entry
             .map((entry) => this.transformToNurse(entry.resource))
             .filter((nurse) => nurse !== null);
 
@@ -149,11 +171,11 @@ class nurseAPI extends RESTDataSource {
 
         // Find next page URL
         nextUrl = null;
-        if (response.link) {
-          const nextLink = response.link.find(
+        if (parsedResponse.link && Array.isArray(parsedResponse.link)) {
+          const nextLink = parsedResponse.link.find(
             (link) => link.relation === "next"
           );
-          if (nextLink) {
+          if (nextLink && nextLink.url) {
             nextUrl = nextLink.url;
           }
         }
@@ -227,36 +249,15 @@ class nurseAPI extends RESTDataSource {
     // Map to our GraphQL Nurse type
     return {
       id: practitioner.id,
-      name: name,
+      name: name || "Unknown",
       title: title || "Healthcare Professional",
       specialty: specialty,
       phoneNumber: phoneNumber,
       email: email,
-      location: null, // Will need to be resolved separately if needed
-      // These will be resolved by field resolvers
+      location: null,
       appointments: null,
       availability: null,
     };
-  }
-
-  extractTitle(practitioner) {
-    // Extract title from qualifications or default to "Registered Nurse"
-    if (practitioner.qualification && practitioner.qualification.length > 0) {
-      const primaryQual = practitioner.qualification[0];
-      if (primaryQual.code?.coding?.[0]?.display) {
-        return primaryQual.code.coding[0].display;
-      }
-      if (primaryQual.code?.text) {
-        return primaryQual.code.text;
-      }
-    }
-    return "Healthcare Professional";
-  }
-
-  extractLocation(practitioner) {
-    // HCHB might store location in extensions or we might need to fetch from a related Location resource
-    // For now, return null and handle in a separate resolver if needed
-    return null;
   }
 }
 

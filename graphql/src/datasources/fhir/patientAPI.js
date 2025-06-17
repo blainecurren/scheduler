@@ -1,4 +1,5 @@
-// graphql/src/datasources/fhir/HCHBPatientAPI.js
+// graphql/src/datasources/fhir/patientAPI.js
+// FIXED VERSION - JSON parsing + getPatients method
 const { RESTDataSource } = require("apollo-datasource-rest");
 const { getToken, transformPatient } = require("./service");
 
@@ -15,7 +16,7 @@ class patientAPI extends RESTDataSource {
     request.headers.set("Content-Type", "application/fhir+json");
   }
 
-  async getAuthToken() {
+  async getToken() {
     if (this.token && this.tokenExpiry && new Date() < this.tokenExpiry) {
       return this.token;
     }
@@ -28,7 +29,7 @@ class patientAPI extends RESTDataSource {
 
   async getAllPatients() {
     try {
-      const token = await this.getAuthToken();
+      const token = await this.getToken();
 
       console.log("[HCHBPatientAPI] Fetching all patients...");
 
@@ -42,7 +43,6 @@ class patientAPI extends RESTDataSource {
       };
 
       while (nextUrl && patients.length < 500) {
-        // Limit to 500 for safety
         const response = await this.get(
           nextUrl === `${this.baseURL}/Patient` ? "Patient" : nextUrl,
           nextUrl === `${this.baseURL}/Patient` ? params : undefined,
@@ -53,8 +53,19 @@ class patientAPI extends RESTDataSource {
           }
         );
 
-        if (response.entry && response.entry.length > 0) {
-          const batchPatients = response.entry.map((entry) =>
+        // FIXED: Parse the response if it's a string
+        let parsedResponse = response;
+        if (typeof response === "string") {
+          try {
+            parsedResponse = JSON.parse(response);
+          } catch (error) {
+            console.error("[HCHBPatientAPI] Failed to parse response:", error);
+            throw new Error("Invalid JSON response from FHIR server");
+          }
+        }
+
+        if (parsedResponse.entry && parsedResponse.entry.length > 0) {
+          const batchPatients = parsedResponse.entry.map((entry) =>
             this.transformToPatient(entry.resource)
           );
 
@@ -66,11 +77,11 @@ class patientAPI extends RESTDataSource {
 
         // Find next page URL
         nextUrl = null;
-        if (response.link) {
-          const nextLink = response.link.find(
+        if (parsedResponse.link && Array.isArray(parsedResponse.link)) {
+          const nextLink = parsedResponse.link.find(
             (link) => link.relation === "next"
           );
-          if (nextLink) {
+          if (nextLink && nextLink.url) {
             nextUrl = nextLink.url;
           }
         }
@@ -86,9 +97,14 @@ class patientAPI extends RESTDataSource {
     }
   }
 
+  // FIXED: Added this method for resolver compatibility
+  async getPatients() {
+    return this.getAllPatients();
+  }
+
   async getPatientById(id) {
     try {
-      const token = await this.getAuthToken();
+      const token = await this.getToken();
 
       console.log(`[HCHBPatientAPI] Fetching patient with ID: ${id}`);
 
@@ -98,7 +114,13 @@ class patientAPI extends RESTDataSource {
         },
       });
 
-      return this.transformToPatient(response);
+      // FIXED: Parse if string
+      let parsedResponse = response;
+      if (typeof response === "string") {
+        parsedResponse = JSON.parse(response);
+      }
+
+      return this.transformToPatient(parsedResponse);
     } catch (error) {
       console.error(`[HCHBPatientAPI] Error fetching patient ${id}:`, error);
       throw error;
@@ -109,7 +131,39 @@ class patientAPI extends RESTDataSource {
   transformToPatient(patient) {
     if (!patient) return null;
 
-    // Extract name
+    // IMPORTANT: Ensure we have an ID
+    const patientId =
+      patient.id || patient.identifier?.[0]?.value || `unknown-${Date.now()}`;
+
+    // Use transformation from service.js if available
+    if (transformPatient) {
+      try {
+        const transformed = transformPatient(patient);
+
+        // CRITICAL FIX: The service.js transformPatient doesn't return an id field
+        // We need to add it manually
+        return {
+          id: patientId, // Use the patient's FHIR id
+          name: transformed.name || "Unknown Patient",
+          phoneNumber: transformed.phoneNumber,
+          email: transformed.email,
+          careNeeds: transformed.careNeeds || [],
+          medicalNotes: transformed.medicalNotes,
+          location: transformed.address
+            ? {
+                address: transformed.address,
+                lat: null,
+                lng: null,
+              }
+            : null,
+          appointments: null,
+        };
+      } catch (error) {
+        console.error("[HCHBPatientAPI] Service transformation error:", error);
+        // Fall through to manual transformation
+      }
+    }
+    // Fallback transformation
     let name = "";
     if (patient.name && patient.name.length > 0) {
       const officialName =
@@ -171,102 +225,34 @@ class patientAPI extends RESTDataSource {
       medicalNotes = infoExt.valueString;
     }
 
-    // Map to our GraphQL Patient type
+    // Extract address for location
+    let location = null;
+    if (patient.address && patient.address.length > 0) {
+      const primaryAddress = patient.address[0];
+      location = {
+        address: [
+          primaryAddress.line?.join(" "),
+          primaryAddress.city,
+          primaryAddress.state,
+          primaryAddress.postalCode,
+        ]
+          .filter(Boolean)
+          .join(", "),
+        lat: null,
+        lng: null,
+      };
+    }
+
     return {
       id: patient.id,
-      name: name,
+      name: name || "Unknown",
       phoneNumber: phoneNumber,
       email: email,
       careNeeds: careNeeds,
       medicalNotes: medicalNotes,
-      location: this.extractLocation(patient),
-      // These will be resolved by field resolvers
+      location: location,
       appointments: null,
     };
-  }
-
-  extractCareNeeds(patient) {
-    // HCHB might store care needs in extensions or other fields
-    const careNeeds = [];
-
-    // Check extensions
-    if (patient.extension) {
-      patient.extension.forEach((ext) => {
-        if (ext.url && ext.url.includes("care-need")) {
-          if (ext.valueString) {
-            careNeeds.push(ext.valueString);
-          } else if (ext.valueCodeableConcept?.text) {
-            careNeeds.push(ext.valueCodeableConcept.text);
-          }
-        }
-      });
-    }
-
-    // Check for conditions or other indicators
-    // This might require fetching related Condition resources
-
-    return careNeeds;
-  }
-
-  extractMedicalNotes(patient) {
-    // Extract medical notes from text narrative or extensions
-    if (patient.text?.div) {
-      // Strip HTML tags
-      return patient.text.div.replace(/<[^>]*>/g, "");
-    }
-
-    // Check for note extensions
-    if (patient.extension) {
-      const noteExt = patient.extension.find(
-        (ext) => ext.url && ext.url.includes("note")
-      );
-      if (noteExt?.valueString) {
-        return noteExt.valueString;
-      }
-    }
-
-    return null;
-  }
-
-  extractLocation(patient) {
-    // Extract location from address
-    if (patient.address && patient.address.length > 0) {
-      const primaryAddress =
-        patient.address.find((addr) => addr.use === "home") ||
-        patient.address[0];
-
-      if (primaryAddress) {
-        return {
-          lat: null, // Would need geocoding
-          lng: null, // Would need geocoding
-          address: this.formatAddress(primaryAddress),
-        };
-      }
-    }
-
-    return null;
-  }
-
-  formatAddress(fhirAddress) {
-    const parts = [];
-
-    if (fhirAddress.line) {
-      parts.push(...fhirAddress.line);
-    }
-
-    if (fhirAddress.city) {
-      parts.push(fhirAddress.city);
-    }
-
-    if (fhirAddress.state) {
-      parts.push(fhirAddress.state);
-    }
-
-    if (fhirAddress.postalCode) {
-      parts.push(fhirAddress.postalCode);
-    }
-
-    return parts.join(", ");
   }
 }
 
