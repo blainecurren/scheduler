@@ -21,7 +21,9 @@
     "start:hchb": "USE_MOCK_DATA=false node src/index.js",
     "db:setup": "node src/database/setup.js",
     "db:test": "node src/database/setup.js",
-    "db:reset": "rm -f nurse-scheduler.db && node src/database/setup.js"
+    "db:reset": "rm -f nurse-scheduler.db && node src/database/setup.js",
+    "db:sync": "node src/database/sync.js",
+    "db:status": "node -e \"const db = require('./src/database/db'); console.log('Nurses:', db.nurses.getAll().length, 'Patients:', db.patients.getAll().length)\""
   },
   "dependencies": {
     "@apollo/client": "^3.8.0",

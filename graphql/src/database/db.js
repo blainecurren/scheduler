@@ -58,8 +58,8 @@ const statements = {
 };
 
 // Transaction helpers
-const transactions = {
-  syncNurses: db.transactions((nurses) => {
+const transaction = {
+  syncNurses: db.transaction((nurses) => {
     for (const nurse of nurses) {
       statements.insertNurse.run({
         id: nurse.id,
@@ -90,7 +90,11 @@ const transactions = {
   }),
 
   syncAppointments: db.transaction((appointments) => {
-    for (const appointment of appointments) {
+  let successCount = 0;
+  let failedAppointments = [];
+  
+  for (const appointment of appointments) {
+    try {
       statements.insertAppointment.run({
         id: appointment.id,
         patient_id: appointment.patientId,
@@ -101,11 +105,29 @@ const transactions = {
         notes: appointment.notes,
         care_services: JSON.stringify(appointment.careServices || []),
       });
+      successCount++;
+    } catch (error) {
+      failedAppointments.push({
+        appointment,
+        error: error.message
+      });
+      console.error(`Failed to insert appointment ${appointment.id}:`, {
+        patientId: appointment.patientId,
+        nurseId: appointment.nurseId,
+        error: error.message
+      });
     }
-
-    return appointments.length;
-  }),
-};
+  } // <-- This closing brace was missing for the for loop
+  
+  if (failedAppointments.length > 0) {
+    console.log(`Successfully synced ${successCount} appointments`);
+    console.log(`Failed to sync ${failedAppointments.length} appointments`);
+    // Log first few failures for debugging
+    console.log('First failed appointments:', failedAppointments.slice(0, 5));
+  }
+  
+  return successCount;
+}), 
 
 // Helper functions
 function transformNurseFromDb(dbNurse) {
@@ -163,7 +185,7 @@ function transformAppointmentFromDb(dbAppointment) {
 module.exports = {
   db,
   statements,
-  transactions,
+  transaction,
   transformNurseFromDb,
   transformPatientFromDb,
   transformAppointmentFromDb,
@@ -173,13 +195,13 @@ module.exports = {
     getAll: () => statements.getAllNurses.all().map(transformNurseFromDb),
     getBySpecialty: (specialty) =>
       statements.getNursesBySpecialty.all(specialty).map(transformNurseFromDb),
-    sync: transactions.syncNurses,
+    sync: transaction.syncNurses,
   },
 
   patients: {
     get: (id) => transformPatientFromDb(statements.getPatient.get(id)),
     getAll: () => statements.getAllPatients.all().map(transformPatientFromDb),
-    sync: transactions.syncPatients,
+    sync: transaction.syncPatients,
   },
 
   appointments: {
@@ -200,6 +222,6 @@ module.exports = {
       statements.getAppointmentsByDateAndNurse
         .all(date, nurseId)
         .map(transformAppointmentFromDb),
-    sync: transactions.syncAppointments,
+    sync: transaction.syncAppointments,
   },
 };
