@@ -90,44 +90,80 @@ const transaction = {
   }),
 
   syncAppointments: db.transaction((appointments) => {
-  let successCount = 0;
-  let failedAppointments = [];
-  
-  for (const appointment of appointments) {
-    try {
-      statements.insertAppointment.run({
-        id: appointment.id,
-        patient_id: appointment.patientId,
-        nurse_id: appointment.nurseId,
-        start_time: appointment.startTime,
-        end_time: appointment.endTime,
-        status: appointment.status,
-        notes: appointment.notes,
-        care_services: JSON.stringify(appointment.careServices || []),
-      });
-      successCount++;
-    } catch (error) {
-      failedAppointments.push({
-        appointment,
-        error: error.message
-      });
-      console.error(`Failed to insert appointment ${appointment.id}:`, {
-        patientId: appointment.patientId,
-        nurseId: appointment.nurseId,
-        error: error.message
-      });
+    let successCount = 0;
+    let failedAppointments = [];
+
+    // Get all valid patient and nurse IDs
+    const validPatientIds = new Set(
+      db
+        .prepare("SELECT id FROM patients")
+        .all()
+        .map((p) => p.id)
+    );
+    const validNurseIds = new Set(
+      db
+        .prepare("SELECT id FROM nurses")
+        .all()
+        .map((n) => n.id)
+    );
+
+    for (const appointment of appointments) {
+      // Check if patient and nurse exist
+      if (!validPatientIds.has(appointment.patientId)) {
+        failedAppointments.push({
+          appointment,
+          error: `Patient ID ${appointment.patientId} not found`,
+        });
+        console.error(
+          `Skipping appointment ${appointment.id}: Patient ${appointment.patientId} not found`
+        );
+        continue;
+      }
+
+      if (!validNurseIds.has(appointment.nurseId)) {
+        failedAppointments.push({
+          appointment,
+          error: `Nurse ID ${appointment.nurseId} not found`,
+        });
+        console.error(
+          `Skipping appointment ${appointment.id}: Nurse ${appointment.nurseId} not found`
+        );
+        continue;
+      }
+
+      try {
+        statements.insertAppointment.run({
+          id: appointment.id,
+          patient_id: appointment.patientId,
+          nurse_id: appointment.nurseId,
+          start_time: appointment.startTime,
+          end_time: appointment.endTime,
+          status: appointment.status,
+          notes: appointment.notes,
+          care_services: JSON.stringify(appointment.careServices || []),
+        });
+        successCount++;
+      } catch (error) {
+        failedAppointments.push({
+          appointment,
+          error: error.message,
+        });
+        console.error(
+          `Failed to insert appointment ${appointment.id}:`,
+          error.message
+        );
+      }
     }
-  } // <-- This closing brace was missing for the for loop
-  
-  if (failedAppointments.length > 0) {
-    console.log(`Successfully synced ${successCount} appointments`);
-    console.log(`Failed to sync ${failedAppointments.length} appointments`);
-    // Log first few failures for debugging
-    console.log('First failed appointments:', failedAppointments.slice(0, 5));
-  }
-  
-  return successCount;
-}), 
+
+    if (failedAppointments.length > 0) {
+      console.log(`Successfully synced ${successCount} appointments`);
+      console.log(`Failed to sync ${failedAppointments.length} appointments`);
+      console.log("First failed appointments:", failedAppointments.slice(0, 5));
+    }
+
+    return successCount;
+  }),
+};
 
 // Helper functions
 function transformNurseFromDb(dbNurse) {
