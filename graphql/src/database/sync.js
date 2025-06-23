@@ -9,6 +9,11 @@ async function syncFromHCHB() {
   console.log("=== Starting HCHB to SQLite Sync ===\n");
 
   try {
+    // Step 0: Clear existing data for fresh sync
+    console.log("Step 0: Clearing existing data...");
+    clearDatabase();
+    console.log("✓ Database cleared\n");
+
     // Step 1: Fetch all appointments first
     console.log("Step 1: Fetching appointments from HCHB...");
     const appointments = await fetchAppointmentsFromHCHB();
@@ -49,16 +54,29 @@ async function syncFromHCHB() {
     const appointmentCount = db.appointments.sync(appointments);
     console.log(`✓ Synced ${appointmentCount} appointments`);
 
-    // Show summary
-    console.log("\n=== Database Summary ===");
-    console.log(`Total Nurses: ${db.nurses.getAll().length}`);
-    console.log(`Total Patients: ${db.patients.getAll().length}`);
-    console.log(`Total Appointments: ${db.appointments.getAll().length}`);
-
     console.log("\n✅ Sync completed successfully!");
   } catch (error) {
     console.error("Sync failed:", error);
     process.exit(1);
+  }
+}
+
+// Clear database function
+function clearDatabase() {
+  try {
+    if (db.db) {
+      // Delete in reverse order of dependencies
+      db.db.prepare("DELETE FROM appointments").run();
+      db.db.prepare("DELETE FROM patients").run();
+      db.db.prepare("DELETE FROM nurses").run();
+    } else {
+      console.warn(
+        "Could not access db.db directly. Database may not be cleared."
+      );
+    }
+  } catch (error) {
+    console.error("Error clearing database:", error.message);
+    // Continue anyway - maybe the sync will handle it
   }
 }
 
@@ -70,15 +88,21 @@ async function fetchAppointmentsFromHCHB() {
   const appointments = [];
   let nextUrl = `${process.env.API_BASE_URL}/Appointment`;
 
-  // Get appointments for the current week
+  // Get appointments for the current week (Sunday to Saturday)
   const today = new Date();
   const startOfWeek = new Date(today);
-  startOfWeek.setDate(today.getDate() - today.getDay());
+  startOfWeek.setDate(today.getDate() - today.getDay()); // Go to Sunday
   const endOfWeek = new Date(startOfWeek);
-  endOfWeek.setDate(startOfWeek.getDate() + 6);
+  endOfWeek.setDate(startOfWeek.getDate() + 6); // Go to Saturday
+
+  console.log(
+    `  Week range: ${startOfWeek.toISOString().split("T")[0]} to ${
+      endOfWeek.toISOString().split("T")[0]
+    }`
+  );
 
   const params = {
-    _count: 50,
+    _count: 50, // Fetch 50 per page
     _sort: "date",
     date: [
       `ge${startOfWeek.toISOString().split("T")[0]}`,
@@ -86,8 +110,11 @@ async function fetchAppointmentsFromHCHB() {
     ],
   };
 
-  while (nextUrl && appointments.length < 1000) {
+  let pageCount = 0;
+  // Remove the 1000 limit to get ALL appointments for the week
+  while (nextUrl) {
     try {
+      pageCount++;
       const response = await axios.get(nextUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -110,7 +137,7 @@ async function fetchAppointmentsFromHCHB() {
         );
         appointments.push(...batch);
         console.log(
-          `  Fetched ${batch.length} appointments (total: ${appointments.length})`
+          `  Page ${pageCount}: Fetched ${batch.length} appointments (total: ${appointments.length})`
         );
       }
 
@@ -128,6 +155,9 @@ async function fetchAppointmentsFromHCHB() {
     }
   }
 
+  console.log(
+    `  Total appointments fetched for the week: ${appointments.length}`
+  );
   return appointments;
 }
 
@@ -284,38 +314,112 @@ function transformPatient(fhir) {
 }
 
 function transformAppointment(fhir) {
+  // Extract start and end times
   let startTime = fhir.start;
   let endTime = fhir.end;
 
+  // Check appointment-date-time extension for more specific times
+  const dateTimeExt = fhir.extension?.find(
+    (ext) =>
+      ext.url ===
+      "https://api.hchb.com/fhir/r4/StructureDefinition/appointment-date-time"
+  );
+
+  if (dateTimeExt?.extension) {
+    const startExt = dateTimeExt.extension.find(
+      (e) => e.url === "AppointmentStartTime"
+    );
+    const endExt = dateTimeExt.extension.find(
+      (e) => e.url === "AppointmentEndTime"
+    );
+    if (startExt?.valueString) {
+      // Parse the datetime string properly
+      startTime = new Date(startExt.valueString).toISOString();
+    }
+    if (endExt?.valueString) {
+      endTime = new Date(endExt.valueString).toISOString();
+    }
+  }
+
+  // Fallback to requestedPeriod if no start/end
   if (!startTime && fhir.requestedPeriod?.[0]) {
     startTime = fhir.requestedPeriod[0].start;
     endTime = fhir.requestedPeriod[0].end;
   }
 
-  const patientRef =
-    fhir.subject?.reference ||
-    fhir.extension?.find((e) => e.url.includes("subject"))?.valueReference
-      ?.reference;
-  const patientId = patientRef?.replace("Patient/", "");
+  // Extract patient reference - check multiple locations
+  let patientId = null;
 
-  const nurseParticipant = fhir.participant?.find((p) =>
-    p.actor?.reference?.startsWith("Practitioner/")
+  // 1. Check extension for subject (HCHB specific)
+  const subjectExt = fhir.extension?.find(
+    (ext) =>
+      ext.url === "https://api.hchb.com/fhir/r4/StructureDefinition/subject"
   );
-  const nurseId = nurseParticipant?.actor?.reference?.replace(
-    "Practitioner/",
-    ""
-  );
+
+  if (subjectExt?.valueReference?.reference) {
+    patientId = subjectExt.valueReference.reference.replace("Patient/", "");
+  }
+
+  // 2. Check supporting-information extension with nested PatientReference
+  if (!patientId) {
+    const supportingInfoExt = fhir.extension?.find(
+      (ext) =>
+        ext.url ===
+        "http://api.hchb.com/fhir/r4/StructureDefinition/supporting-information"
+    );
+
+    if (supportingInfoExt?.extension) {
+      const patientRefExt = supportingInfoExt.extension.find(
+        (e) => e.url === "PatientReference"
+      );
+      if (patientRefExt?.valueReference?.reference) {
+        patientId = patientRefExt.valueReference.reference.replace(
+          "Patient/",
+          ""
+        );
+      }
+    }
+  }
+
+  // 3. Fallback to standard subject field
+  if (!patientId && fhir.subject?.reference) {
+    patientId = fhir.subject.reference.replace("Patient/", "");
+  }
+
+  // Get first practitioner from participants
+  let nurseId = null;
+  if (fhir.participant && fhir.participant.length > 0) {
+    for (const participant of fhir.participant) {
+      if (participant.actor?.reference?.startsWith("Practitioner/")) {
+        nurseId = participant.actor.reference.replace("Practitioner/", "");
+        break;
+      }
+    }
+  }
+
+  // Extract service type with display text
+  const careServices = [];
+  if (fhir.serviceType && fhir.serviceType.length > 0) {
+    for (const service of fhir.serviceType) {
+      if (service.coding && service.coding[0]) {
+        careServices.push(
+          service.coding[0].display || service.coding[0].code || service.text
+        );
+      } else if (service.text) {
+        careServices.push(service.text);
+      }
+    }
+  }
 
   return {
     id: fhir.id,
     patientId: patientId,
     nurseId: nurseId,
     startTime: startTime || new Date().toISOString(),
-    endTime: endTime || startTime,
+    endTime: endTime || startTime || new Date().toISOString(),
     status: fhir.status?.toUpperCase() || "SCHEDULED",
     notes: fhir.comment || fhir.description,
-    careServices:
-      fhir.serviceType?.map((s) => s.coding?.[0]?.display || s.text) || [],
+    careServices: careServices,
   };
 }
 
