@@ -5,6 +5,9 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
+    "start:sqlite": "DATA_SOURCE=sqlite node src/index.js",
+    "start:fhir": "DATA_SOURCE=fhir node src/index.js",
+    "start:mock": "DATA_SOURCE=mock node src/index.js",
     "dev": "nodemon src/index.js",
     "test": "jest",
     "lint": "eslint .",
@@ -17,13 +20,11 @@
     "sync:patients": "node src/datasources/fhir/HCHBservice.js --patients",
     "sync:appointments": "node src/datasources/fhir/HCHBservice.js --appointments",
     "test:integration": "node src/test-hchb-integration.js",
-    "start:mock": "USE_MOCK_DATA=true node src/index.js",
-    "start:hchb": "USE_MOCK_DATA=false node src/index.js",
     "db:setup": "node src/database/setup.js",
     "db:test": "node src/database/setup.js",
     "db:reset": "rm -f nurse-scheduler.db && node src/database/setup.js",
     "db:sync": "node src/database/sync.js",
-    "db:status": "node -e \"const db = require('./src/database/db'); console.log('Nurses:', db.nurses.getAll().length, 'Patients:', db.patients.getAll().length)\""
+    "db:status": "node -e \"const db = require('./src/database/db'); console.log('Database Status:\\n'); console.log('Nurses:', db.nurses.getAll().length); console.log('Patients:', db.patients.getAll().length); console.log('Appointments:', db.appointments.getByDate(new Date().toISOString().split(\\'T\\')[0]).length, 'today');\""
   },
   "dependencies": {
     "@apollo/client": "^3.8.0",
