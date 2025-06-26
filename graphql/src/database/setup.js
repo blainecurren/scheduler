@@ -180,7 +180,10 @@ function createPreparedStatements() {
       VALUES (@id, @patient_id, @nurse_id, @start_time, @end_time, @status, @notes, @care_services, CURRENT_TIMESTAMP)
     `),
 
-    getAppointment: db.prepare("SELECT * FROM appointments WHERE id = ?"),
+    getAppointment: db.prepare(
+      `SELECT * FROM appointments WHERE id = ? AND (care_services IS NULL OR care_services NOT LIKE '%IDG MEETING%')`
+    ),
+
     getAppointmentsByDate: db.prepare(`
       SELECT * FROM appointments 
       WHERE date(start_time) = date(?) 

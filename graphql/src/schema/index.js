@@ -36,8 +36,8 @@ const typeDefs = gql`
   # Represents a scheduled appointment
   type Appointment {
     id: ID!
-    patient: Patient!
-    nurse: Nurse!
+    patient: Patient
+    nurse: Nurse
     startTime: String!
     endTime: String!
     status: AppointmentStatus!
@@ -53,6 +53,9 @@ const typeDefs = gql`
     COMPLETED
     CANCELLED
     MISSED
+    FULFILLED
+    NOSHOW
+    BOOKED
   }
 
   # Nurse availability time slots

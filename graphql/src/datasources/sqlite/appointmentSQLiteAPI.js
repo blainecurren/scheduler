@@ -1,4 +1,6 @@
 // graphql/src/datasources/sqlite/appointmentSQLiteAPI.js
+// Simplified version - SQL does the filtering, no JavaScript filtering needed
+
 const { DataSource } = require("apollo-datasource");
 const db = require("../../database/db");
 
@@ -35,7 +37,10 @@ class AppointmentSQLiteAPI extends DataSource {
         appointments = db.appointments.getByDate(today);
       }
 
-      console.log(`[SQLite] Found ${appointments.length} appointments`);
+      console.log(
+        `[SQLite] Found ${appointments.length} appointments (IDG MEETINGS already excluded at SQL level)`
+      );
+
       return appointments;
     } catch (error) {
       console.error("[SQLite] Error fetching appointments:", error);
@@ -49,7 +54,9 @@ class AppointmentSQLiteAPI extends DataSource {
       const appointment = db.appointments.get(id);
 
       if (!appointment) {
-        console.log(`[SQLite] Appointment ${id} not found`);
+        console.log(
+          `[SQLite] Appointment ${id} not found or is an IDG MEETING`
+        );
         return null;
       }
 
