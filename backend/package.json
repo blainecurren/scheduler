@@ -1,0 +1,26 @@
+{
+  "name": "nurse-scheduler-backend",
+  "version": "1.0.0",
+  "description": "HCHB sync and database for nurse scheduler",
+  "main": "sync/hchb-sync.js",
+  "type": "commonjs",
+  "scripts": {
+    "sync": "node sync/hchb-sync.js",
+    "sync:test": "node sync/hchb-sync.js --test",
+    "db:init": "node -e \"require('./db/config').initializeDatabase()\"",
+    "db:check": "node -e \"console.log(require('./db/config').checkDatabaseHealth())\"",
+    "test": "node sync/hchb-sync.js --test"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.29.0",
+    "better-sqlite3": "^9.4.0",
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.0"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.20.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
