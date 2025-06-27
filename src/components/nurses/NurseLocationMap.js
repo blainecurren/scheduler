@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import useAPIClient from "../../hooks/apiClient";
+import useAPIClient from "../../hooks/apiClient.js";
 import "./NurseLocationMap.css";
 
 // Fix for Leaflet marker images

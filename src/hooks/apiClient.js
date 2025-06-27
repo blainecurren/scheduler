@@ -1,17 +1,22 @@
 // src/hooks/apiClient.js
-// Complete API client that matches all backend endpoints
-
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 class APIClient {
   constructor(baseURL = API_BASE_URL) {
     this.baseURL = baseURL;
+    this.requestCache = new Map(); // Simple cache to prevent duplicate requests
   }
 
   async request(endpoint, options = {}) {
     const url = `${this.baseURL}${endpoint}`;
+    const cacheKey = `${endpoint}-${JSON.stringify(options)}`;
+    
+    // Check if we're already making this request
+    if (this.requestCache.has(cacheKey)) {
+      return this.requestCache.get(cacheKey);
+    }
     
     const config = {
       headers: {
@@ -21,35 +26,32 @@ class APIClient {
       ...options,
     };
 
-    const response = await fetch(url, config);
+    const requestPromise = fetch(url, config)
+      .then(async response => {
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+      })
+      .finally(() => {
+        // Remove from cache after request completes
+        this.requestCache.delete(cacheKey);
+      });
+
+    // Cache the promise to prevent duplicate requests
+    this.requestCache.set(cacheKey, requestPromise);
     
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    return response.json();
+    return requestPromise;
   }
-
-  // ===================
-  // HEALTH & STATUS
-  // ===================
 
   async getHealth() {
     return this.request('/health');
   }
 
-  // ===================
-  // FILTER OPTIONS
-  // ===================
-
   async getFilterOptions() {
     return this.request('/api/appointments/options');
   }
-
-  // ===================
-  // APPOINTMENT FILTERING
-  // ===================
 
   async getAppointments(filters = {}) {
     const params = new URLSearchParams();
@@ -70,14 +72,9 @@ class APIClient {
     return this.request(endpoint);
   }
 
-  // ===================
-  // MAPPABLE APPOINTMENTS
-  // ===================
-
   async getMappableAppointments(filters = {}) {
     const params = new URLSearchParams();
     
-    // Default to today if no date provided
     if (!filters.date) {
       filters.date = new Date().toISOString().split('T')[0];
     }
@@ -98,10 +95,6 @@ class APIClient {
     return this.request(endpoint);
   }
 
-  // ===================
-  // CALENDAR VIEW
-  // ===================
-
   async getCalendarData(filters = {}) {
     const params = new URLSearchParams();
     
@@ -121,17 +114,9 @@ class APIClient {
     return this.request(endpoint);
   }
 
-  // ===================
-  // STATISTICS
-  // ===================
-
   async getStats() {
     return this.request('/api/appointments/stats');
   }
-
-  // ===================
-  // SYNC OPERATIONS
-  // ===================
 
   async triggerSync() {
     return this.request('/api/appointments/sync', {
@@ -147,15 +132,21 @@ class APIClient {
 // Create singleton instance
 const apiClient = new APIClient();
 
-// ===================
-// REACT HOOK
-// ===================
-
 function useAPIClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const activeRequests = useRef(new Set());
 
   const execute = useCallback(async (apiMethod, ...args) => {
+    const requestKey = `${apiMethod.name}-${JSON.stringify(args)}`;
+    
+    // Prevent duplicate requests
+    if (activeRequests.current.has(requestKey)) {
+      console.log(`⏳ Request already in progress: ${requestKey}`);
+      return;
+    }
+    
+    activeRequests.current.add(requestKey);
     setLoading(true);
     setError(null);
     
@@ -167,21 +158,13 @@ function useAPIClient() {
       console.error('API Error:', err);
       throw err;
     } finally {
+      activeRequests.current.delete(requestKey);
       setLoading(false);
     }
   }, []);
 
-  // Return the API client methods with loading/error state
-  return {
-    // State
-    loading,
-    error,
-    clearError: () => setError(null),
-    
-    // Direct API client access
-    client: apiClient,
-    
-    // Wrapped methods with loading/error handling
+  // Memoize the API functions with stable references
+  const memoizedFunctions = useMemo(() => ({
     getHealth: (...args) => execute(apiClient.getHealth, ...args),
     getFilterOptions: (...args) => execute(apiClient.getFilterOptions, ...args),
     getAppointments: (...args) => execute(apiClient.getAppointments, ...args),
@@ -190,6 +173,16 @@ function useAPIClient() {
     getStats: (...args) => execute(apiClient.getStats, ...args),
     triggerSync: (...args) => execute(apiClient.triggerSync, ...args),
     getSyncStatus: (...args) => execute(apiClient.getSyncStatus, ...args),
+  }), [execute]);
+
+  const clearError = useCallback(() => setError(null), []);
+
+  return {
+    loading,
+    error,
+    clearError,
+    client: apiClient,
+    ...memoizedFunctions
   };
 }
 

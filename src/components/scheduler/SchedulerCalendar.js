@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from "react";
-import useAPIClient from "../../hooks/apiClient";
+import useAPIClient from "../../hooks/apiClient.js";
 import "./SchedulerCalendar.css";
 
+// Debug logging
+console.log('=== SchedulerCalendar Debug ===');
+console.log('useAPIClient imported:', useAPIClient, typeof useAPIClient);
+
 const SchedulerCalendar = () => {
+  console.log('SchedulerCalendar component starting...');
+  
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [calendarData, setCalendarData] = useState({});
@@ -10,19 +16,35 @@ const SchedulerCalendar = () => {
   const [selectedNurse, setSelectedNurse] = useState("");
   const [nurses, setNurses] = useState([]);
 
+  console.log('About to call useAPIClient()...');
+  
+  let apiClientResult;
+  try {
+    apiClientResult = useAPIClient();
+    console.log('useAPIClient() returned:', apiClientResult);
+  } catch (error) {
+    console.error('Error calling useAPIClient():', error);
+    throw error;
+  }
+
   const { 
     loading, 
     error, 
     getCalendarData, 
     getFilterOptions,
     clearError 
-  } = useAPIClient();
+  } = apiClientResult;
+
+  console.log('Destructured values:', { loading, error, getCalendarData, getFilterOptions, clearError });
 
   // Load nurses for filtering
   useEffect(() => {
+    console.log('Load nurses useEffect triggered');
     const loadNurses = async () => {
       try {
+        console.log('Calling getFilterOptions...');
         const options = await getFilterOptions();
+        console.log('getFilterOptions returned:', options);
         if (options?.nurses) {
           setNurses(options.nurses);
         }
@@ -36,6 +58,7 @@ const SchedulerCalendar = () => {
 
   // Load calendar data when month or nurse filter changes
   useEffect(() => {
+    console.log('Load calendar data useEffect triggered');
     const loadCalendarData = async () => {
       try {
         clearError();
@@ -57,7 +80,9 @@ const SchedulerCalendar = () => {
           filters.nurses = selectedNurse;
         }
 
+        console.log('Calling getCalendarData with filters:', filters);
         const data = await getCalendarData(filters);
+        console.log('getCalendarData returned:', data);
         setCalendarData(data.appointmentsByDate || {});
 
       } catch (err) {
@@ -184,6 +209,8 @@ const SchedulerCalendar = () => {
       return dateString;
     }
   };
+
+  console.log('About to render SchedulerCalendar...');
 
   return (
     <div className="scheduler-container">

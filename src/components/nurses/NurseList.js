@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import useAPIClient from "../../hooks/apiClient";
+import useAPIClient from "../../hooks/apiClient.js";
 import "./NurseList.css";
 
 const NurseList = () => {
