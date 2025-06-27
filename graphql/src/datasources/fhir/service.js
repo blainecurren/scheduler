@@ -1272,6 +1272,375 @@ function getEndOfWeek() {
   return new Date(today.setDate(diff)).toISOString().split("T")[0];
 }
 
+// Enhanced FHIR transformation functions with proper location/geocoordinate extraction
+// Add these enhanced functions to your graphql/src/datasources/fhir/service.js file
+
+/**
+ * Extract complete location data from FHIR resource including geocoordinates
+ * FHIR Location resource can contain position data with lat/lng
+ * Patient/Practitioner addresses might also have extensions with coordinates
+ */
+function extractLocationData(resource) {
+  let location = null;
+
+  // Method 1: If this is a Location resource, extract from position
+  if (resource.resourceType === "Location" && resource.position) {
+    location = {
+      address: extractAddressString(resource.address),
+      lat: resource.position.latitude || null,
+      lng: resource.position.longitude || null,
+      altitude: resource.position.altitude || null,
+    };
+  }
+
+  // Method 2: Extract from address array (Patient/Practitioner)
+  else if (resource.address && resource.address.length > 0) {
+    const primaryAddress = resource.address[0];
+
+    location = {
+      address: extractAddressString(primaryAddress),
+      lat: null,
+      lng: null,
+    };
+
+    // Check for geocoding extensions on the address
+    if (primaryAddress.extension) {
+      const geoExt = primaryAddress.extension.find(
+        (ext) =>
+          ext.url === "http://hl7.org/fhir/StructureDefinition/geolocation" ||
+          ext.url.includes("geolocation") ||
+          ext.url.includes("coordinate")
+      );
+
+      if (geoExt && geoExt.extension) {
+        const latExt = geoExt.extension.find((e) => e.url === "latitude");
+        const lngExt = geoExt.extension.find((e) => e.url === "longitude");
+
+        if (latExt && lngExt) {
+          location.lat = parseFloat(latExt.valueDecimal);
+          location.lng = parseFloat(lngExt.valueDecimal);
+        }
+      }
+    }
+
+    // Check for HCHB-specific location extensions
+    if (resource.extension) {
+      const locationExt = resource.extension.find(
+        (ext) =>
+          ext.url.includes("location") ||
+          ext.url.includes("address") ||
+          ext.url.includes("geocode")
+      );
+
+      if (locationExt) {
+        // Extract coordinates from HCHB extensions if they exist
+        const coordData = extractHCHBLocationExtension(locationExt);
+        if (coordData.lat && coordData.lng) {
+          location.lat = coordData.lat;
+          location.lng = coordData.lng;
+        }
+      }
+    }
+  }
+
+  return location;
+}
+
+/**
+ * Extract address string from FHIR Address object
+ */
+function extractAddressString(address) {
+  if (!address) return null;
+
+  const parts = [];
+
+  // Add address lines
+  if (address.line && address.line.length > 0) {
+    parts.push(...address.line);
+  }
+
+  // Add city, state, postal code
+  if (address.city) parts.push(address.city);
+  if (address.state) parts.push(address.state);
+  if (address.postalCode) parts.push(address.postalCode);
+  if (address.country) parts.push(address.country);
+
+  return parts.filter(Boolean).join(", ");
+}
+
+/**
+ * Extract coordinates from HCHB-specific extensions
+ */
+function extractHCHBLocationExtension(extension) {
+  const result = { lat: null, lng: null };
+
+  // Try different possible extension structures
+  if (extension.extension) {
+    // Look for latitude/longitude in nested extensions
+    const latExt = extension.extension.find(
+      (e) =>
+        e.url.toLowerCase().includes("lat") ||
+        e.url.toLowerCase().includes("latitude")
+    );
+    const lngExt = extension.extension.find(
+      (e) =>
+        e.url.toLowerCase().includes("lng") ||
+        e.url.toLowerCase().includes("longitude") ||
+        e.url.toLowerCase().includes("long")
+    );
+
+    if (latExt && latExt.valueDecimal) {
+      result.lat = parseFloat(latExt.valueDecimal);
+    }
+    if (lngExt && lngExt.valueDecimal) {
+      result.lng = parseFloat(lngExt.valueDecimal);
+    }
+  }
+
+  // Check for direct coordinate values in the extension
+  if (extension.valueDecimal && extension.url.toLowerCase().includes("lat")) {
+    result.lat = parseFloat(extension.valueDecimal);
+  }
+  if (extension.valueDecimal && extension.url.toLowerCase().includes("lng")) {
+    result.lng = parseFloat(extension.valueDecimal);
+  }
+
+  return result;
+}
+
+/**
+ * Enhanced Patient transformation with proper location extraction
+ */
+function transformPatient(fhirPatient) {
+  let name = "";
+  if (fhirPatient.name && fhirPatient.name.length > 0) {
+    const officialName =
+      fhirPatient.name.find((n) => n.use === "official") || fhirPatient.name[0];
+    if (officialName) {
+      const parts = [];
+      if (officialName.given) parts.push(...officialName.given);
+      if (officialName.family) parts.push(officialName.family);
+      name = parts.join(" ");
+    }
+  }
+
+  // Extract contact information
+  let phoneNumber = null;
+  let email = null;
+  if (fhirPatient.telecom) {
+    const mobile = fhirPatient.telecom.find(
+      (t) => t.system === "phone" && t.use === "mobile"
+    );
+    const home = fhirPatient.telecom.find(
+      (t) => t.system === "phone" && t.use === "home"
+    );
+    phoneNumber = mobile?.value || home?.value;
+
+    const emailContact = fhirPatient.telecom.find((t) => t.system === "email");
+    email = emailContact?.value;
+  }
+
+  // Extract care needs from extensions
+  const careNeeds = [];
+  if (fhirPatient.extension) {
+    const diagnosisExt = fhirPatient.extension.find(
+      (ext) => ext.url === "diagnosis"
+    );
+    if (diagnosisExt?.valueString) {
+      careNeeds.push(diagnosisExt.valueString);
+    }
+
+    const serviceCodeExt = fhirPatient.extension.find(
+      (ext) => ext.url === "serviceCode"
+    );
+    if (serviceCodeExt?.valueString) {
+      careNeeds.push(`Service: ${serviceCodeExt.valueString}`);
+    }
+  }
+
+  // Extract medical notes
+  let medicalNotes = null;
+  const infoExt = fhirPatient.extension?.find(
+    (ext) => ext.url === "information"
+  );
+  if (infoExt?.valueString) {
+    medicalNotes = infoExt.valueString;
+  }
+
+  // Enhanced location extraction
+  const location = extractLocationData(fhirPatient);
+
+  return {
+    id: fhirPatient.id,
+    name: name || "Unknown",
+    phoneNumber: phoneNumber,
+    email: email,
+    careNeeds: careNeeds,
+    medicalNotes: medicalNotes,
+    location: location, // Now includes lat/lng if available
+  };
+}
+
+/**
+ * Enhanced Practitioner transformation with proper location extraction
+ */
+function transformPractitioner(fhirPractitioner) {
+  // Extract name
+  let name = "";
+  if (fhirPractitioner.name && fhirPractitioner.name.length > 0) {
+    name = formatHumanName(fhirPractitioner.name[0]);
+  }
+
+  // Extract contact info
+  const phoneNumber = getContactValue(fhirPractitioner.telecom, "phone");
+  const email = getContactValue(fhirPractitioner.telecom, "email");
+
+  // Extract specialty and title
+  const specialty =
+    fhirPractitioner.qualification?.[0]?.code?.text ||
+    fhirPractitioner.qualification?.[0]?.code?.coding?.[0]?.display;
+
+  const title = specialty || "Healthcare Professional";
+
+  // Enhanced location extraction
+  const location = extractLocationData(fhirPractitioner);
+
+  return {
+    id: fhirPractitioner.id,
+    name: name || "Unknown",
+    title: title,
+    specialty: specialty,
+    phoneNumber: phoneNumber,
+    email: email,
+    location: location, // Now includes lat/lng if available
+    active: fhirPractitioner.active,
+  };
+}
+
+/**
+ * Enhanced Appointment transformation - extract location from referenced Location resources
+ */
+function transformAppointment(
+  fhirAppointment,
+  patientData = null,
+  practitionerData = null,
+  locationData = null
+) {
+  // Extract basic appointment data
+  let startTime = fhirAppointment.start;
+  let endTime = fhirAppointment.end;
+
+  // Check for HCHB-specific time extensions
+  const dateTimeExt = fhirAppointment.extension?.find(
+    (ext) =>
+      ext.url ===
+      "https://api.hchb.com/fhir/r4/StructureDefinition/appointment-date-time"
+  );
+
+  if (dateTimeExt?.extension) {
+    const startExt = dateTimeExt.extension.find(
+      (e) => e.url === "AppointmentStartTime"
+    );
+    const endExt = dateTimeExt.extension.find(
+      (e) => e.url === "AppointmentEndTime"
+    );
+
+    if (startExt?.valueString) {
+      startTime = new Date(startExt.valueString).toISOString();
+    }
+    if (endExt?.valueString) {
+      endTime = new Date(endExt.valueString).toISOString();
+    }
+  }
+
+  // Extract patient ID
+  let patientId = null;
+  const subjectExt = fhirAppointment.extension?.find(
+    (ext) =>
+      ext.url === "https://api.hchb.com/fhir/r4/StructureDefinition/subject"
+  );
+  if (subjectExt?.valueReference?.reference) {
+    patientId = subjectExt.valueReference.reference.replace("Patient/", "");
+  }
+
+  // Extract practitioner ID
+  let practitionerId = null;
+  if (fhirAppointment.participant) {
+    const practitionerParticipant = fhirAppointment.participant.find((p) =>
+      p.actor?.reference?.startsWith("Practitioner/")
+    );
+    if (practitionerParticipant) {
+      practitionerId = practitionerParticipant.actor.reference.replace(
+        "Practitioner/",
+        ""
+      );
+    }
+  }
+
+  // Extract location - try multiple sources
+  let location = null;
+
+  // 1. From referenced Location resource
+  if (locationData) {
+    location = extractLocationData(locationData);
+  }
+
+  // 2. From participant with Location reference
+  if (!location && fhirAppointment.participant) {
+    const locationParticipant = fhirAppointment.participant.find((p) =>
+      p.actor?.reference?.startsWith("Location/")
+    );
+    if (locationParticipant?.actor?.display) {
+      location = {
+        address: locationParticipant.actor.display,
+        lat: null,
+        lng: null,
+      };
+    }
+  }
+
+  // 3. From patient location if available
+  if (!location && patientData && patientData.location) {
+    location = patientData.location;
+  }
+
+  // Extract care services
+  const careServices = [];
+  if (fhirAppointment.serviceType) {
+    fhirAppointment.serviceType.forEach((service) => {
+      if (service.text) {
+        careServices.push(service.text);
+      } else if (service.coding && service.coding.length > 0) {
+        careServices.push(service.coding[0].display || service.coding[0].code);
+      }
+    });
+  }
+
+  // Map FHIR status to GraphQL status
+  const statusMap = {
+    proposed: "SCHEDULED",
+    pending: "SCHEDULED",
+    booked: "SCHEDULED",
+    arrived: "IN_PROGRESS",
+    fulfilled: "FULFILLED",
+    cancelled: "CANCELLED",
+    noshow: "MISSED",
+    "entered-in-error": "CANCELLED",
+  };
+
+  return {
+    id: fhirAppointment.id,
+    patientId: patientId,
+    nurseId: practitionerId,
+    startTime: startTime,
+    endTime: endTime,
+    status: statusMap[fhirAppointment.status] || "SCHEDULED",
+    notes: fhirAppointment.comment,
+    careServices: careServices,
+    location: location, // Now includes full location data with potential coordinates
+  };
+}
+
 // Export new functions
 module.exports = {
   // Authentication
@@ -1343,5 +1712,4 @@ if (require.main === module) {
         process.exit(1);
       });
   }
-  // ... keep existing test commands
 }
