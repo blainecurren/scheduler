@@ -1,12 +1,12 @@
 // backend/sync/hchb-sync.js
-// Simple HCHB sync for appointments only
+// Complete HCHB sync with batch fetching for weekly SN11 appointments
 
 const axios = require('axios');
-const { db, appointments } = require('../db/config');
+const { db, appointments, clearDatabase } = require('../db/config');
 require('dotenv').config();
 
 // ===================
-// CONFIGURATION & AUTH
+// CONFIGURATION
 // ===================
 
 const CONFIG = {
@@ -15,20 +15,20 @@ const CONFIG = {
   agencySecret: process.env.HCHB_AGENCY_SECRET,
   tokenUrl: process.env.HCHB_TOKEN_URL,
   apiBaseUrl: process.env.HCHB_API_BASE_URL,
-  batchSize: 200, // Increased batch size
-  maxWorkers: 10, // Concurrent workers
   timeout: 60000,
 };
 
 let tokenCache = null;
+
+// ===================
+// AUTHENTICATION
+// ===================
 
 async function getAuthToken() {
   if (tokenCache && tokenCache.expiresAt > new Date()) {
     return tokenCache.token;
   }
 
-  console.log('🔑 Getting HCHB token...');
-  
   const response = await axios.post(
     CONFIG.tokenUrl,
     new URLSearchParams({
@@ -57,11 +57,7 @@ async function getAuthToken() {
 // DATE UTILITIES
 // ===================
 
-// ===================
-// DATE UTILITIES
-// ===================
-
-function getWeekDateRange() {
+function getCurrentWeekDates() {
   const now = new Date();
   const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
   
@@ -93,499 +89,364 @@ function getWeekDateRange() {
 }
 
 // ===================
-// CONCURRENT PROCESSING
+// DATA FETCHING
 // ===================
-
-class ConcurrentProcessor {
-  constructor(maxWorkers = 10) {
-    this.maxWorkers = maxWorkers;
-    this.activeWorkers = 0;
-    this.queue = [];
-  }
-
-  async processInBatches(tasks, processor) {
-    return new Promise((resolve, reject) => {
-      const results = [];
-      let completed = 0;
-
-      const processTask = async (task, index) => {
-        this.activeWorkers++;
-        try {
-          const result = await processor(task);
-          results[index] = result;
-        } catch (error) {
-          results[index] = { error: error.message, task };
-        } finally {
-          this.activeWorkers--;
-          completed++;
-          
-          if (completed === tasks.length) {
-            resolve(results);
-          } else {
-            // Process next task if available
-            this.processNext();
-          }
-        }
-      };
-
-      const processNext = () => {
-        if (this.queue.length > 0 && this.activeWorkers < this.maxWorkers) {
-          const { task, index } = this.queue.shift();
-          processTask(task, index);
-        }
-      };
-
-      // Start initial batch
-      for (let i = 0; i < Math.min(tasks.length, this.maxWorkers); i++) {
-        processTask(tasks[i], i);
-      }
-
-      // Queue remaining tasks
-      for (let i = this.maxWorkers; i < tasks.length; i++) {
-        this.queue.push({ task: tasks[i], index: i });
-      }
-
-      this.processNext = processNext;
-    });
-  }
-}
-
-async function debugAuth() {
-  console.log('🔍 Debugging HCHB Authentication...');
-  console.log('='.repeat(50));
-  
-  // Check environment variables
-  console.log('Environment Variables:');
-  console.log(`CLIENT_ID: ${CONFIG.clientId ? '✅ SET' : '❌ MISSING'}`);
-  console.log(`RESOURCE_SECURITY_ID: ${CONFIG.resourceSecurityId ? '✅ SET' : '❌ MISSING'}`);
-  console.log(`AGENCY_SECRET: ${CONFIG.agencySecret ? '✅ SET' : '❌ MISSING'}`);
-  console.log(`TOKEN_URL: ${CONFIG.tokenUrl}`);
-  console.log(`API_BASE_URL: ${CONFIG.apiBaseUrl}`);
-  
-  // Check actual values (first 4 chars only)
-  console.log('\nFirst 4 characters of each credential:');
-  console.log(`CLIENT_ID starts with: ${CONFIG.clientId?.substring(0, 4) || 'MISSING'}`);
-  console.log(`RESOURCE_SECURITY_ID starts with: ${CONFIG.resourceSecurityId?.substring(0, 4) || 'MISSING'}`);
-  console.log(`AGENCY_SECRET starts with: ${CONFIG.agencySecret?.substring(0, 4) || 'MISSING'}`);
-  
-  // Try authentication with detailed error handling
-  console.log('\n🔑 Testing token request...');
-  
-  try {
-    const requestData = new URLSearchParams({
-      grant_type: 'agency_auth',
-      client_id: CONFIG.clientId,
-      scope: 'openid HCHB.api.scope agency.identity hchb.identity',
-      resource_security_id: CONFIG.resourceSecurityId,
-      agency_secret: CONFIG.agencySecret,
-    });
-    
-    console.log('Request payload keys:', Array.from(requestData.keys()));
-    
-    const response = await axios.post(
-      CONFIG.tokenUrl,
-      requestData,
-      {
-        headers: { 
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json'
-        },
-        timeout: CONFIG.timeout,
-      }
-    );
-    
-    console.log('✅ Token request successful!');
-    console.log('Response keys:', Object.keys(response.data));
-    
-  } catch (error) {
-    console.log('❌ Token request failed');
-    console.log('Status:', error.response?.status);
-    console.log('Status Text:', error.response?.statusText);
-    console.log('Response Headers:', error.response?.headers);
-    console.log('Response Data:', JSON.stringify(error.response?.data, null, 2));
-    
-    // Common HCHB auth errors
-    if (error.response?.status === 400) {
-      console.log('\n🔍 Status 400 usually means:');
-      console.log('- Invalid client_id');
-      console.log('- Invalid resource_security_id'); 
-      console.log('- Invalid agency_secret');
-      console.log('- Wrong grant_type or scope');
-      console.log('- Missing required parameters');
-    }
-  }
-}
-
-// ===================
-// FHIR DATA FETCHING
-// ===================
-
-// ===================
-// FHIR DATA FETCHING
-// ===================
-
-// ===================
-// FHIR DATA FETCHING
-// ===================
-
-async function fetchAppointmentPage(url, token) {
-  const response = await axios.get(url, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/fhir+json',
-    },
-    timeout: CONFIG.timeout,
-  });
-
-  return response.data;
-}
 
 async function fetchAppointmentsForDay(date, token) {
-  console.log(`📅 Fetching appointments for ${date.dayName} (${date.date})${date.isToday ? ' - TODAY' : ''}`);
-
-  // Build URL for single day - no filter for now to see actual service types
-  const baseUrl = `${CONFIG.apiBaseUrl}/Appointment`;
-  const params = new URLSearchParams({
-    _count: CONFIG.batchSize.toString(),
-    // Single day filter - exact date match
-    date: date.date,
-  });
+  console.log(`📅 Fetching SN11 appointments for ${date.dayName} (${date.date})${date.isToday ? ' - TODAY' : ''}...`);
   
-  // Add include parameters for related resources
-  params.append('_include', 'Appointment:patient');
-  params.append('_include', 'Appointment:practitioner');
-  params.append('_include', 'Appointment:location');
+  // Build URL with both service-type and date filters
+  const url = `${CONFIG.apiBaseUrl}/Appointment?service-type=SN11&date=${date.date}&_count=100`;
+  
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/fhir+json',
+      },
+      timeout: CONFIG.timeout,
+    });
 
-  let nextUrl = `${baseUrl}?${params.toString()}`;
-  const dayResources = [];
-  let pageCount = 0;
-
-  console.log(`   🔍 No filters - fetching all appointments to analyze service types`);
-
-  while (nextUrl) {
-    try {
-      const bundle = await fetchAppointmentPage(nextUrl, token);
-      pageCount++;
-      
-      if (bundle.entry) {
-        dayResources.push(...bundle.entry.map(entry => entry.resource));
-        
-        // On first page, analyze service types
-        if (pageCount === 1) {
-          const appointments = bundle.entry.filter(entry => entry.resource.resourceType === 'Appointment');
-          if (appointments.length > 0) {
-            console.log(`   🔍 Sample service types found:`);
-            const serviceTypes = new Set();
-            
-            appointments.slice(0, 5).forEach((entry, i) => {
-              const apt = entry.resource;
-              if (apt.serviceType && apt.serviceType.length > 0) {
-                apt.serviceType.forEach(st => {
-                  if (st.coding && st.coding[0]) {
-                    const code = st.coding[0].code;
-                    const display = st.coding[0].display;
-                    serviceTypes.add(`${code}: ${display}`);
-                  }
-                });
-              }
-            });
-            
-            serviceTypes.forEach(type => console.log(`     - ${type}`));
-          }
-        }
-      }
-
-      // Find next page URL
-      const nextLink = bundle.link?.find(link => link.relation === 'next');
-      nextUrl = nextLink?.url || null;
-      
-      // Intelligent rate limiting
-      const rateLimitDelay = getRateLimitDelay(bundle);
-      if (rateLimitDelay > 0) {
-        await new Promise(resolve => setTimeout(resolve, rateLimitDelay));
-      }
-      
-    } catch (error) {
-      // Handle rate limiting with retry
-      if (error.response?.status === 429) {
-        const retryAfter = parseInt(error.response.headers['retry-after']) || 30;
-        console.log(`   ⏳ Rate limited - waiting ${retryAfter}s...`);
-        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-        continue;
-      }
-      
-      // Handle token expiration
-      if (error.response?.status === 401) {
-        console.log('   🔄 Token expired - getting new token...');
-        tokenCache = null;
-        const newToken = await getAuthToken();
-        continue;
-      }
-      
-      console.error(`   ❌ Error fetching ${date.dayName}:`, error.response?.data || error.message);
-      break;
-    }
+    const appointments = response.data.entry?.filter(entry => entry.resource.resourceType === 'Appointment') || [];
+    console.log(`   ✅ ${date.dayName}: ${appointments.length} SN11 appointments found`);
+    
+    return response.data.entry || [];
+  } catch (error) {
+    console.error(`   ❌ Error fetching ${date.dayName}:`, error.response?.data || error.message);
+    return [];
   }
-
-  const appointments = dayResources.filter(r => r.resourceType === 'Appointment');
-  console.log(`   ✅ ${date.dayName}: ${appointments.length} appointments (${dayResources.length} total resources, ${pageCount} pages)`);
-  
-  return dayResources;
 }
 
-async function fetchAppointments() {
-  const token = await getAuthToken();
-  const dateRange = getWeekDateRange();
+async function fetchAllAppointments() {
+  console.log('📅 Fetching SN11 appointments for current week (Monday to Sunday)...');
   
-  console.log(`📅 Fetching appointments day-by-day for current week:`);
-  console.log(`   Week: ${dateRange.startDate} to ${dateRange.endDate}`);
-  console.log(`   Days: ${dateRange.weekDays.map(d => d.dayName).join(', ')}`);
+  const token = await getAuthToken();
+  const weekInfo = getCurrentWeekDates();
+  
+  console.log(`📊 Week Overview:`);
+  console.log(`   Period: ${weekInfo.startDate} to ${weekInfo.endDate}`);
+  console.log(`   Days: ${weekInfo.weekDays.map(d => d.dayName).join(', ')}`);
   console.log('');
-
-  const allResources = [];
+  
+  const allEntries = [];
   let totalAppointments = 0;
-
-  // Process each day sequentially to avoid hitting API limits
-  for (const day of dateRange.weekDays) {
-    const dayResources = await fetchAppointmentsForDay(day, token);
-    allResources.push(...dayResources);
+  
+  // Process each day sequentially
+  for (const day of weekInfo.weekDays) {
+    const dayEntries = await fetchAppointmentsForDay(day, token);
+    allEntries.push(...dayEntries);
     
-    const dayAppointments = dayResources.filter(r => r.resourceType === 'Appointment').length;
+    const dayAppointments = dayEntries.filter(entry => entry.resource.resourceType === 'Appointment').length;
     totalAppointments += dayAppointments;
     
-    // Small delay between days to be respectful
+    // Small delay between days to be respectful to the API
     await new Promise(resolve => setTimeout(resolve, 200));
   }
-
+  
   console.log('');
   console.log(`📊 Week Summary:`);
-  console.log(`   Total appointments: ${totalAppointments}`);
-  console.log(`   Total resources: ${allResources.length}`);
+  console.log(`   Total SN11 appointments: ${totalAppointments}`);
+  console.log(`   Total resources: ${allEntries.length}`);
   console.log(`   Average per day: ${Math.round(totalAppointments / 7)} appointments`);
-
-  // Separate resource types for final breakdown
-  const appointments = allResources.filter(r => r.resourceType === 'Appointment');
-  const patients = allResources.filter(r => r.resourceType === 'Patient');
-  const practitioners = allResources.filter(r => r.resourceType === 'Practitioner');
-  const locations = allResources.filter(r => r.resourceType === 'Location');
-
-  console.log(`📋 Resource breakdown:`);
-  console.log(`   Appointments: ${appointments.length}`);
-  console.log(`   Patients: ${patients.length}`);
-  console.log(`   Practitioners: ${practitioners.length}`);
-  console.log(`   Locations: ${locations.length}`);
-
-  return allResources;
-}
-
-// Smart rate limiting based on response patterns
-function getRateLimitDelay(response) {
-  // Check for rate limit headers
-  if (response.headers) {
-    const remaining = parseInt(response.headers['x-ratelimit-remaining']) || null;
-    
-    if (remaining !== null && remaining < 10) {
-      return 300; // Slow down when approaching limit
-    }
-  }
+  console.log('   Note: Duplicates will be handled automatically with auto-increment IDs');
+  console.log('');
   
-  // Default minimal delay
-  return 25;
-}
-
-// ===================
-// FHIR DATA TRANSFORMATION
-// ===================
-
-function extractNameFromResource(resource) {
-  if (!resource) return null;
-  
-  // Handle Patient resource
-  if (resource.resourceType === 'Patient') {
-    const name = resource.name?.[0];
-    return name ? `${name.given?.[0] || ''} ${name.family || ''}`.trim() : null;
-  }
-  
-  // Handle Practitioner resource
-  if (resource.resourceType === 'Practitioner') {
-    const name = resource.name?.[0];
-    return name ? `${name.given?.[0] || ''} ${name.family || ''}`.trim() : null;
-  }
-  
-  return null;
-}
-
-function findContainedResource(appointment, resourceType, id) {
-  if (!appointment.contained) return null;
-  
-  return appointment.contained.find(resource => 
-    resource.resourceType === resourceType && resource.id === id
-  );
-}
-
-function transformAppointment(fhirAppointment, bundleResources = []) {
-  const description = fhirAppointment.description || '';
-  const serviceTypes = fhirAppointment.serviceType?.map(st => st.text).join(' ') || '';
-  
-  // Skip IDG meetings
-  if (description.includes('IDG') || serviceTypes.includes('IDG')) {
-    return null;
-  }
-
-  const participants = fhirAppointment.participant || [];
-  
-  // Extract IDs from references
-  const patientRef = participants.find(p => p.actor?.reference?.startsWith('Patient/'))?.actor?.reference;
-  const nurseRef = participants.find(p => p.actor?.reference?.startsWith('Practitioner/'))?.actor?.reference;
-  const locationRef = participants.find(p => p.actor?.reference?.startsWith('Location/'))?.actor?.reference;
-  
-  const patientId = patientRef?.replace('Patient/', '') || null;
-  const nurseId = nurseRef?.replace('Practitioner/', '') || null;
-  const locationId = locationRef?.replace('Location/', '') || null;
-
-  // Try to get names from contained resources first
-  let patientName = null;
-  let nurseName = null;
-
-  // Method 1: Check contained resources
-  if (patientId) {
-    const containedPatient = findContainedResource(fhirAppointment, 'Patient', patientId);
-    patientName = extractNameFromResource(containedPatient);
-  }
-
-  if (nurseId) {
-    const containedPractitioner = findContainedResource(fhirAppointment, 'Practitioner', nurseId);
-    nurseName = extractNameFromResource(containedPractitioner);
-  }
-
-  // Method 2: Check if names are in extensions
-  if (!patientName || !nurseName) {
-    const extensions = fhirAppointment.extension || [];
-    
-    extensions.forEach(ext => {
-      if (ext.url?.includes('patient-name') || ext.url?.includes('patientName')) {
-        patientName = patientName || ext.valueString;
-      }
-      if (ext.url?.includes('practitioner-name') || ext.url?.includes('practitionerName')) {
-        nurseName = nurseName || ext.valueString;
-      }
-    });
-  }
-
-  // Method 3: Look in bundle resources (from _include)
-  if (!patientName && patientId) {
-    const patient = bundleResources.find(r => r.resourceType === 'Patient' && r.id === patientId);
-    patientName = extractNameFromResource(patient);
-  }
-
-  if (!nurseName && nurseId) {
-    const practitioner = bundleResources.find(r => r.resourceType === 'Practitioner' && r.id === nurseId);
-    nurseName = extractNameFromResource(practitioner);
-  }
-
-  // Parse times
-  const startTime = fhirAppointment.start ? new Date(fhirAppointment.start).toISOString() : null;
-  const endTime = fhirAppointment.end ? new Date(fhirAppointment.end).toISOString() : null;
-
-  // Extract care services
-  const careServices = fhirAppointment.serviceType?.map(st => st.text) || [];
-
+  // Return as FHIR Bundle format for processing
   return {
-    id: fhirAppointment.id,
-    nurseId: nurseId,
-    nurseName: nurseName || 'Unknown Nurse',
-    patientId: patientId,
-    patientName: patientName || 'Unknown Patient',
-    startTime: startTime,
-    endTime: endTime,
-    status: fhirAppointment.status || 'unknown',
-    careServices: JSON.stringify(careServices),
-    locationId: locationId,
+    resourceType: 'Bundle',
+    type: 'searchset',
+    total: totalAppointments,
+    entry: allEntries
   };
 }
 
 // ===================
-// DATABASE OPERATIONS
+// BATCH RESOURCE FETCHING
 // ===================
 
-// ===================
-// DATABASE OPERATIONS
-// ===================
-
-async function syncAppointments(fhirBundle) {
-  console.log('📅 Processing appointments with concurrent workers...');
+async function fetchPatientAndPractitionerData(appointmentEntries) {
+  console.log('👥 Fetching patient, practitioner, and location data in optimized batches...');
   
-  // Separate appointments from included resources
-  const appointmentResources = fhirBundle.filter(r => r.resourceType === 'Appointment');
-  const includedResources = fhirBundle.filter(r => r.resourceType !== 'Appointment');
+  const token = await getAuthToken();
+  const resourceMap = new Map();
   
-  console.log(`🔄 Processing ${appointmentResources.length} appointments in batches...`);
-
-  // Process appointments in batches using concurrent workers
-  const processor = new ConcurrentProcessor(CONFIG.maxWorkers);
-  const batchSize = 50; // Process 50 appointments per batch
-  const batches = [];
+  // Collect unique patient, practitioner, and location IDs
+  const patientIds = new Set();
+  const practitionerIds = new Set();
+  const locationIds = new Set();
   
-  for (let i = 0; i < appointmentResources.length; i += batchSize) {
-    batches.push(appointmentResources.slice(i, i + batchSize));
-  }
-
-  let totalSynced = 0;
-  let totalFiltered = 0;
-
-  const batchResults = await processor.processInBatches(batches, async (batch) => {
-    let batchSynced = 0;
-    let batchFiltered = 0;
-
-    for (const fhirAppointment of batch) {
-      try {
-        const appointment = transformAppointment(fhirAppointment, includedResources);
-        
-        if (!appointment) {
-          batchFiltered++;
-          continue; // Skip filtered appointments (IDG meetings, etc.)
-        }
-        
-        await db.insert(appointments)
-          .values(appointment)
-          .onConflictDoUpdate({
-            target: appointments.id,
-            set: {
-              nurseId: appointment.nurseId,
-              nurseName: appointment.nurseName,
-              patientId: appointment.patientId,
-              patientName: appointment.patientName,
-              startTime: appointment.startTime,
-              endTime: appointment.endTime,
-              status: appointment.status,
-              careServices: appointment.careServices,
-              locationId: appointment.locationId,
-            }
-          });
-        
-        batchSynced++;
-      } catch (error) {
-        console.error(`❌ Error syncing appointment ${fhirAppointment.id}:`, error.message);
-      }
+  appointmentEntries.forEach(entry => {
+    const apt = entry.resource;
+    
+    // Get patient ID from extension
+    const subjectExt = apt.extension?.find(ext => 
+      ext.url?.includes('StructureDefinition/subject')
+    );
+    if (subjectExt?.valueReference?.reference) {
+      const patientId = subjectExt.valueReference.reference.replace('Patient/', '');
+      patientIds.add(patientId);
     }
-
-    return { synced: batchSynced, filtered: batchFiltered };
+    
+    // Get practitioner ID from participant
+    const nurseParticipant = apt.participant?.find(p => 
+      p.actor?.reference?.startsWith('Practitioner/')
+    );
+    if (nurseParticipant?.actor?.reference) {
+      const practitionerId = nurseParticipant.actor.reference.replace('Practitioner/', '');
+      practitionerIds.add(practitionerId);
+    }
+    
+    // Get location ID from extension
+    const locationExt = apt.extension?.find(ext => 
+      ext.url?.includes('service-location')
+    );
+    if (locationExt?.valueReference?.reference) {
+      const locationId = locationExt.valueReference.reference.replace('Location/', '');
+      locationIds.add(locationId);
+    }
   });
+  
+  console.log(`📊 Found ${patientIds.size} unique patients, ${practitionerIds.size} unique practitioners, ${locationIds.size} unique locations`);
+  
+  // Batch fetch all resource types
+  await batchFetchResources('Practitioner', practitionerIds, token, resourceMap);
+  await batchFetchResources('Patient', patientIds, token, resourceMap);
+  await batchFetchResources('Location', locationIds, token, resourceMap);
+  
+  console.log(`✅ Successfully fetched ${resourceMap.size} additional resources`);
+  return resourceMap;
+}
 
-  // Aggregate results
-  for (const result of batchResults) {
-    if (result && !result.error) {
-      totalSynced += result.synced;
-      totalFiltered += result.filtered;
+async function batchFetchResources(resourceType, ids, token, resourceMap) {
+  if (ids.size === 0) return;
+  
+  const idsArray = Array.from(ids);
+  const batchSize = 10; // Fetch 10 resources at a time to avoid URL length limits
+  
+  console.log(`🔄 Fetching ${idsArray.length} ${resourceType} resources in batches of ${batchSize}...`);
+  
+  // Process in batches
+  for (let i = 0; i < idsArray.length; i += batchSize) {
+    const batch = idsArray.slice(i, i + batchSize);
+    const batchNumber = Math.floor(i / batchSize) + 1;
+    const totalBatches = Math.ceil(idsArray.length / batchSize);
+    
+    console.log(`   📦 Batch ${batchNumber}/${totalBatches}: Fetching ${batch.length} ${resourceType} resources...`);
+    
+    // Batch request only (no fallback for testing)
+    await fetchResourceBatch(resourceType, batch, token, resourceMap);
+    
+    // Rate limiting delay between batches
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+}
+
+async function fetchResourceBatch(resourceType, ids, token, resourceMap) {
+  try {
+    // FHIR batch request using _id parameter
+    const idFilter = ids.map(id => `${id}`).join(',');
+    const url = `${CONFIG.apiBaseUrl}/${resourceType}?_id=${idFilter}&_count=50`;
+    
+    console.log(`     🔗 Request URL: ${url}`);
+    
+    const response = await axios.get(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/fhir+json',
+      },
+      timeout: CONFIG.timeout,
+    });
+    
+    if (response.data.entry) {
+      response.data.entry.forEach(entry => {
+        const resource = entry.resource;
+        resourceMap.set(`${resourceType}/${resource.id}`, resource);
+        
+        // Show what we're extracting
+        if (resourceType === 'Practitioner') {
+          const name = extractName(resource);
+          console.log(`       👩‍⚕️ ${resource.id}: ${name}`);
+        } else if (resourceType === 'Patient') {
+          const name = extractName(resource);
+          console.log(`       👤 ${resource.id}: ${name}`);
+        } else if (resourceType === 'Location') {
+          const locationInfo = extractLocationInfo(resource);
+          console.log(`       📍 ${resource.id}: ${locationInfo.name} (${locationInfo.address})`);
+        }
+      });
+      console.log(`     ✅ Batch: Successfully fetched ${response.data.entry.length} ${resourceType} resources`);
+    } else {
+      console.log(`     ⚠️  Batch returned no entries`);
+    }
+    
+  } catch (error) {
+    console.log(`     ❌ Batch request failed: ${error.response?.status} - ${error.message}`);
+    if (error.response?.data) {
+      console.log(`     📋 Error details:`, JSON.stringify(error.response.data, null, 2));
     }
   }
+}
 
-  console.log(`✅ Sync completed:`);
-  console.log(`   📋 Synced: ${totalSynced} appointments`);
-  console.log(`   🚫 Filtered: ${totalFiltered} appointments (IDG meetings, etc.)`);
-  console.log(`   📊 Total processed: ${totalSynced + totalFiltered}`);
+// ===================
+// DATA PROCESSING
+// ===================
 
-  return totalSynced;
+function extractName(resource) {
+  if (!resource?.name?.[0]) return 'Unknown';
+  const name = resource.name[0];
+  return `${name.given?.[0] || ''} ${name.family || ''}`.trim();
+}
+
+function extractLocationInfo(resource) {
+  if (!resource) return { name: 'Unknown Location', address: '', latitude: null, longitude: null };
+  
+  // Extract name
+  const name = resource.name || 'Unknown Location';
+  
+  // Extract address
+  let address = '';
+  if (resource.address) {
+    const addr = resource.address;
+    const parts = [];
+    if (addr.line && addr.line[0]) parts.push(addr.line[0]);
+    if (addr.city) parts.push(addr.city);
+    if (addr.state) parts.push(addr.state);
+    if (addr.postalCode) parts.push(addr.postalCode);
+    address = parts.join(', ');
+  }
+  
+  // Extract coordinates from position
+  let latitude = null;
+  let longitude = null;
+  if (resource.position) {
+    latitude = resource.position.latitude || null;
+    longitude = resource.position.longitude || null;
+  }
+  
+  return {
+    name,
+    address,
+    latitude,
+    longitude
+  };
+}
+
+function processBundle(bundle, resourceMap = new Map()) {
+  if (!bundle.entry) return [];
+  
+  // If no resourceMap provided, create from bundle entries
+  if (resourceMap.size === 0) {
+    bundle.entry.forEach(entry => {
+      const resource = entry.resource;
+      resourceMap.set(`${resource.resourceType}/${resource.id}`, resource);
+    });
+  }
+  
+  // Process appointments
+  const appointments = bundle.entry
+    .filter(entry => entry.resource.resourceType === 'Appointment')
+    .map(entry => {
+      const apt = entry.resource;
+      
+      // Extract patient info from EXTENSIONS (HCHB specific)
+      let patientRef = null;
+      let patientId = null;
+      
+      // Method 1: Check for HCHB subject extension
+      const subjectExt = apt.extension?.find(ext => 
+        ext.url?.includes('StructureDefinition/subject')
+      );
+      if (subjectExt?.valueReference?.reference) {
+        patientRef = subjectExt.valueReference.reference;
+        patientId = patientRef.replace('Patient/', '');
+      }
+      
+      // Method 2: Check for supporting-information extension with PatientReference
+      if (!patientRef) {
+        const supportingExt = apt.extension?.find(ext => 
+          ext.url?.includes('StructureDefinition/supporting-information')
+        );
+        const patientRefExt = supportingExt?.extension?.find(ext => 
+          ext.url === 'PatientReference'
+        );
+        if (patientRefExt?.valueReference?.reference) {
+          patientRef = patientRefExt.valueReference.reference;
+          patientId = patientRef.replace('Patient/', '');
+        }
+      }
+      
+      // Method 3: Fallback to standard FHIR subject (if present)
+      if (!patientRef && apt.subject?.reference) {
+        patientRef = apt.subject.reference;
+        patientId = patientRef.replace('Patient/', '');
+      }
+      
+      const patient = resourceMap.get(patientRef);
+      const patientName = patient ? extractName(patient) : 'Unknown Patient';
+      
+      // Extract nurse/practitioner info from participants
+      const nurseParticipant = apt.participant?.find(p => 
+        p.type?.[0]?.coding?.[0]?.code === 'PRF' || 
+        p.actor?.reference?.startsWith('Practitioner/')
+      );
+      const nurseRef = nurseParticipant?.actor?.reference;
+      const nurseId = nurseRef?.replace('Practitioner/', '');
+      const nurse = resourceMap.get(nurseRef);
+      const nurseName = nurse ? extractName(nurse) : 'Unknown Nurse';
+      
+      // Extract location info from extensions
+      const locationExt = apt.extension?.find(ext => 
+        ext.url?.includes('service-location')
+      );
+      const locationRef = locationExt?.valueReference?.reference;
+      const locationId = locationRef?.replace('Location/', '');
+      const location = resourceMap.get(locationRef);
+      const locationInfo = location ? extractLocationInfo(location) : { 
+        name: 'Unknown Location', 
+        address: '', 
+        latitude: null, 
+        longitude: null 
+      };
+      
+      // Extract service info
+      const serviceType = apt.serviceType?.[0]?.coding?.[0]?.display || 
+                         apt.serviceType?.[0]?.text || '';
+      const serviceCode = apt.serviceType?.[0]?.coding?.[0]?.code || '';
+      
+      // Extract start date from extensions (HCHB specific)
+      let startDate = apt.start; // Standard FHIR field
+      
+      // HCHB stores dates in appointment-date-time extension
+      const dateTimeExt = apt.extension?.find(ext => 
+        ext.url?.includes('appointment-date-time')
+      );
+      if (dateTimeExt?.extension) {
+        const startTimeExt = dateTimeExt.extension.find(ext => ext.url === 'AppointmentStartTime');
+        
+        if (startTimeExt?.valueString) {
+          startDate = startTimeExt.valueString;
+        }
+      }
+      
+      return {
+        fhirId: apt.id, // Store HCHB's ID as reference
+        patientId,
+        patientName,
+        nurseId,
+        nurseName,
+        startDate,
+        status: apt.status,
+        serviceType,
+        serviceCode,
+        locationId,
+        locationName: locationInfo.name,
+        locationAddress: locationInfo.address,
+        locationLatitude: locationInfo.latitude,
+        locationLongitude: locationInfo.longitude,
+      };
+    });
+    
+  return appointments;
 }
 
 // ===================
@@ -593,17 +454,93 @@ async function syncAppointments(fhirBundle) {
 // ===================
 
 async function fullSync() {
-  console.log('🚀 Starting HCHB appointments sync...');
+  console.log('🚀 Starting HCHB weekly sync (SN11 appointments only)...');
   
   try {
-    const fhirBundle = await fetchAppointments();
-    const syncedCount = await syncAppointments(fhirBundle);
+    // Fetch appointments for the current week
+    const bundle = await fetchAllAppointments();
+    console.log(`📊 Fetched ${bundle.total} SN11 appointments for the week`);
     
-    console.log(`✅ Sync completed! Processed ${syncedCount} appointments`);
-    return { success: true, count: syncedCount };
+    // DUMP RAW JSON TO FILE (optional, for debugging)
+    const fs = require('fs');
+    const path = require('path');
+    const outputPath = path.join(process.cwd(), 'fhir-weekly-debug.json');
+    
+    fs.writeFileSync(outputPath, JSON.stringify(bundle, null, 2));
+    console.log(`📄 Raw FHIR response saved to: ${outputPath}`);
+    
+    // Show basic structure
+    if (bundle.entry && bundle.entry.length > 0) {
+      const resourceTypes = {};
+      bundle.entry.forEach(entry => {
+        const type = entry.resource.resourceType;
+        resourceTypes[type] = (resourceTypes[type] || 0) + 1;
+      });
+      console.log('📊 Resource breakdown:', resourceTypes);
+      
+      // Fetch patient and practitioner data using batch method
+      const resourceMap = await fetchPatientAndPractitionerData(bundle.entry);
+      
+      // Add fetched resources to the bundle for processing
+      const allResources = new Map();
+      
+      // Add original appointment resources
+      bundle.entry.forEach(entry => {
+        allResources.set(`${entry.resource.resourceType}/${entry.resource.id}`, entry.resource);
+      });
+      
+      // Add separately fetched resources
+      resourceMap.forEach((resource, key) => {
+        allResources.set(key, resource);
+      });
+      
+      console.log(`📊 Total resources available for processing: ${allResources.size}`);
+      
+      // Process with complete resource map
+      const appointmentData = processBundle(bundle, allResources);
+      console.log(`🔄 Processed ${appointmentData.length} appointments`);
+      
+      // Show sample processed data
+      if (appointmentData.length > 0) {
+        console.log('\n📋 Sample processed data (first 3 appointments):');
+        appointmentData.slice(0, 3).forEach((apt, i) => {
+          console.log(`  Appointment ${i + 1}:`);
+          console.log(`    FHIR ID: ${apt.fhirId}`);
+          console.log(`    Patient: ${apt.patientName} (${apt.patientId})`);
+          console.log(`    Nurse: ${apt.nurseName} (${apt.nurseId})`);
+          console.log(`    Start: ${apt.startDate}`);
+          console.log(`    Status: ${apt.status}`);
+          console.log(`    Service: ${apt.serviceType} (${apt.serviceCode})`);
+          console.log(`    Location: ${apt.locationName} (${apt.locationId})`);
+          console.log(`    Address: ${apt.locationAddress}`);
+          if (apt.locationLatitude && apt.locationLongitude) {
+            console.log(`    Coordinates: ${apt.locationLatitude}, ${apt.locationLongitude}`);
+          }
+        });
+      }
+      
+      // Clear existing data
+      const clearedCount = clearDatabase();
+      
+      // Insert new data
+      if (appointmentData.length > 0) {
+        await db.insert(appointments).values(appointmentData);
+        console.log(`✅ Replaced ${clearedCount} old appointments with ${appointmentData.length} new SN11 appointments`);
+      } else {
+        console.log(`⚠️  No SN11 appointments found for this week`);
+      }
+      
+      console.log('\n✅ Weekly sync completed successfully!');
+      console.log(`📄 Debug data saved to: ${outputPath}`);
+      return { success: true, count: appointmentData.length };
+    } else {
+      console.log('❌ No appointments found in bundle');
+      return { success: false, error: 'No appointments found' };
+    }
     
   } catch (error) {
     console.error('❌ Sync failed:', error.message);
+    console.error('Full error:', error);
     return { success: false, error: error.message };
   }
 }
@@ -612,50 +549,13 @@ async function fullSync() {
 // EXPORTS & CLI
 // ===================
 
-module.exports = { fullSync, getAuthToken, debugAuth };
+module.exports = { fullSync, getAuthToken };
 
 if (require.main === module) {
-  const args = process.argv.slice(2);
+  const { initializeDatabase } = require('../db/config');
   
-  if (args.includes('--help') || args.includes('-h')) {
-    console.log(`
-🏥 HCHB Sync Tool
-
-Usage:
-  node hchb-sync.js              # Run full sync
-  node hchb-sync.js --debug      # Debug authentication
-  node hchb-sync.js --test       # Test connection
-  node hchb-sync.js --help       # Show this help
-
-Environment Variables Required:
-  HCHB_CLIENT_ID                 Your HCHB client ID
-  HCHB_RESOURCE_SECURITY_ID      Your resource security ID  
-  HCHB_AGENCY_SECRET             Your agency secret
-  HCHB_TOKEN_URL                 Token endpoint URL
-  HCHB_API_BASE_URL              FHIR API base URL
-    `);
-    process.exit(0);
-  }
-
-  if (args.includes('--debug') || args.includes('-d')) {
-    debugAuth().then(() => process.exit(0));
-  } else if (args.includes('--test') || args.includes('-t')) {
-    console.log('🧪 Testing HCHB connection...');
-    getAuthToken()
-      .then(() => {
-        console.log('✅ HCHB connection test successful!');
-        process.exit(0);
-      })
-      .catch((error) => {
-        console.error('❌ HCHB connection test failed:', error.message);
-        process.exit(1);
-      });
-  } else {
-    const { initializeDatabase } = require('../db/config');
-    
-    initializeDatabase();
-    fullSync().then(result => {
-      process.exit(result.success ? 0 : 1);
-    });
-  }
+  initializeDatabase();
+  fullSync().then(result => {
+    process.exit(result.success ? 0 : 1);
+  });
 }
