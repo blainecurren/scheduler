@@ -1,15 +1,14 @@
-import React from "react";
-import ReactDOM from "react-dom/client";
-import { ApolloProvider } from "@apollo/client";
-import { apolloClient } from "./services/apollo/apollo-client";
-import App from "./App";
-import "./index.css";
+// src/index.js
+// Clean React app entry point without Apollo Client
 
-const root = ReactDOM.createRoot(document.getElementById("root"));
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+import App from './App';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <ApolloProvider client={apolloClient}>
-      <App />
-    </ApolloProvider>
+    <App />
   </React.StrictMode>
 );

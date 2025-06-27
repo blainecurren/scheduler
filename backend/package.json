@@ -1,26 +1,39 @@
 {
-  "name": "nurse-scheduler-backend",
+  "name": "hchb-scheduler-backend",
   "version": "1.0.0",
-  "description": "HCHB sync and database for nurse scheduler",
-  "main": "sync/hchb-sync.js",
-  "type": "commonjs",
+  "description": "HCHB appointment sync and API backend",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18.0.0 <23.0.0"
+  },
   "scripts": {
+    "start": "node server.js",
+    "server": "node server.js",
+    "server-debug": "node server-debug.js",
     "sync": "node sync/hchb-sync.js",
-    "sync:test": "node sync/hchb-sync.js --test",
-    "db:init": "node -e \"require('./db/config').initializeDatabase()\"",
-    "db:check": "node -e \"console.log(require('./db/config').checkDatabaseHealth())\"",
-    "test": "node sync/hchb-sync.js --test"
+    "dev": "nodemon server.js",
+    "clean": "rm -rf node_modules package-lock.json",
+    "clean-install": "npm run clean && npm install",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "drizzle-orm": "^0.29.0",
-    "better-sqlite3": "^9.4.0",
     "axios": "^1.6.0",
-    "dotenv": "^16.3.0"
+    "better-sqlite3": "^9.6.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "drizzle-orm": "^0.29.0",
+    "express": "^4.18.2"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.20.0"
+    "nodemon": "^3.0.1"
   },
-  "engines": {
-    "node": ">=18.0.0"
-  }
+  "keywords": [
+    "hchb",
+    "fhir",
+    "appointments",
+    "scheduling",
+    "healthcare"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
 }

@@ -1,0 +1,196 @@
+// src/hooks/apiClient.js
+// Complete API client that matches all backend endpoints
+
+import { useState, useCallback } from 'react';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+
+class APIClient {
+  constructor(baseURL = API_BASE_URL) {
+    this.baseURL = baseURL;
+  }
+
+  async request(endpoint, options = {}) {
+    const url = `${this.baseURL}${endpoint}`;
+    
+    const config = {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+      ...options,
+    };
+
+    const response = await fetch(url, config);
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
+  // ===================
+  // HEALTH & STATUS
+  // ===================
+
+  async getHealth() {
+    return this.request('/health');
+  }
+
+  // ===================
+  // FILTER OPTIONS
+  // ===================
+
+  async getFilterOptions() {
+    return this.request('/api/appointments/options');
+  }
+
+  // ===================
+  // APPOINTMENT FILTERING
+  // ===================
+
+  async getAppointments(filters = {}) {
+    const params = new URLSearchParams();
+    
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        if (Array.isArray(value)) {
+          params.set(key, value.join(','));
+        } else {
+          params.set(key, value);
+        }
+      }
+    });
+    
+    const queryString = params.toString();
+    const endpoint = `/api/appointments/filter${queryString ? `?${queryString}` : ''}`;
+    
+    return this.request(endpoint);
+  }
+
+  // ===================
+  // MAPPABLE APPOINTMENTS
+  // ===================
+
+  async getMappableAppointments(filters = {}) {
+    const params = new URLSearchParams();
+    
+    // Default to today if no date provided
+    if (!filters.date) {
+      filters.date = new Date().toISOString().split('T')[0];
+    }
+    
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        if (Array.isArray(value)) {
+          params.set(key, value.join(','));
+        } else {
+          params.set(key, value);
+        }
+      }
+    });
+    
+    const queryString = params.toString();
+    const endpoint = `/api/appointments/mappable${queryString ? `?${queryString}` : ''}`;
+    
+    return this.request(endpoint);
+  }
+
+  // ===================
+  // CALENDAR VIEW
+  // ===================
+
+  async getCalendarData(filters = {}) {
+    const params = new URLSearchParams();
+    
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        if (Array.isArray(value)) {
+          params.set(key, value.join(','));
+        } else {
+          params.set(key, value);
+        }
+      }
+    });
+    
+    const queryString = params.toString();
+    const endpoint = `/api/appointments/calendar${queryString ? `?${queryString}` : ''}`;
+    
+    return this.request(endpoint);
+  }
+
+  // ===================
+  // STATISTICS
+  // ===================
+
+  async getStats() {
+    return this.request('/api/appointments/stats');
+  }
+
+  // ===================
+  // SYNC OPERATIONS
+  // ===================
+
+  async triggerSync() {
+    return this.request('/api/appointments/sync', {
+      method: 'POST'
+    });
+  }
+
+  async getSyncStatus() {
+    return this.request('/api/appointments/sync-status');
+  }
+}
+
+// Create singleton instance
+const apiClient = new APIClient();
+
+// ===================
+// REACT HOOK
+// ===================
+
+function useAPIClient() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const execute = useCallback(async (apiMethod, ...args) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const result = await apiMethod.apply(apiClient, args);
+      return result;
+    } catch (err) {
+      setError(err.message);
+      console.error('API Error:', err);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Return the API client methods with loading/error state
+  return {
+    // State
+    loading,
+    error,
+    clearError: () => setError(null),
+    
+    // Direct API client access
+    client: apiClient,
+    
+    // Wrapped methods with loading/error handling
+    getHealth: (...args) => execute(apiClient.getHealth, ...args),
+    getFilterOptions: (...args) => execute(apiClient.getFilterOptions, ...args),
+    getAppointments: (...args) => execute(apiClient.getAppointments, ...args),
+    getMappableAppointments: (...args) => execute(apiClient.getMappableAppointments, ...args),
+    getCalendarData: (...args) => execute(apiClient.getCalendarData, ...args),
+    getStats: (...args) => execute(apiClient.getStats, ...args),
+    triggerSync: (...args) => execute(apiClient.triggerSync, ...args),
+    getSyncStatus: (...args) => execute(apiClient.getSyncStatus, ...args),
+  };
+}
+
+export default useAPIClient;
