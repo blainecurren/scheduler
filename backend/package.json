@@ -11,6 +11,9 @@
     "server": "node server.js",
     "server-debug": "node server-debug.js",
     "sync": "node sync/hchb-sync.js",
+    "coordinates": "node services/azure-maps-service.js",
+    "geocode": "node services/azure-maps-service.js",
+    "sync-and-geocode": "npm run sync && npm run coordinates",
     "dev": "nodemon server.js",
     "clean": "rm -rf node_modules package-lock.json",
     "clean-install": "npm run clean && npm install",
@@ -32,7 +35,9 @@
     "fhir",
     "appointments",
     "scheduling",
-    "healthcare"
+    "healthcare",
+    "azure-maps",
+    "geocoding"
   ],
   "author": "Your Name",
   "license": "MIT"
