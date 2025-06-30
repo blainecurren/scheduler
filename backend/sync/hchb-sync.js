@@ -1,16 +1,16 @@
 // backend/sync/hchb-sync.js
-// Complete HCHB sync with batch fetching for weekly SN11 appointments
+// FIXED: Properly extracts nurse addresses AND patient coordinates
 
 const axios = require('axios');
 const { db, appointments, clearDatabase } = require('../db/config');
 require('dotenv').config();
 
 // ===================
-// DATABASE UTILITIES
+// DATABASE UTILITIES (unchanged)
 // ===================
 
 async function insertAppointmentsInBatches(appointmentData) {
-  const batchSize = 500; // SQLite can handle ~999 variables, but we'll be conservative
+  const batchSize = 500;
   const totalBatches = Math.ceil(appointmentData.length / batchSize);
   
   console.log(`💾 Inserting ${appointmentData.length} appointments in ${totalBatches} batches of ${batchSize}...`);
@@ -25,10 +25,9 @@ async function insertAppointmentsInBatches(appointmentData) {
       console.log(`   ✅ Batch ${batchNumber}/${totalBatches}: Successfully inserted ${batch.length} appointments`);
     } catch (error) {
       console.error(`   ❌ Batch ${batchNumber}/${totalBatches}: Failed to insert appointments:`, error.message);
-      throw error; // Re-throw to stop the sync process
+      throw error;
     }
     
-    // Small delay between batches to be gentle on the database
     if (i + batchSize < appointmentData.length) {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
@@ -38,7 +37,7 @@ async function insertAppointmentsInBatches(appointmentData) {
 }
 
 // ===================
-// CONFIGURATION
+// CONFIGURATION & AUTH (unchanged)
 // ===================
 
 const CONFIG = {
@@ -51,10 +50,6 @@ const CONFIG = {
 };
 
 let tokenCache = null;
-
-// ===================
-// AUTHENTICATION
-// ===================
 
 async function getAuthToken() {
   if (tokenCache && tokenCache.expiresAt > new Date()) {
@@ -86,28 +81,24 @@ async function getAuthToken() {
 }
 
 // ===================
-// DATE UTILITIES
+// DATE UTILITIES (unchanged)
 // ===================
 
 function getCurrentWeekDates() {
   const now = new Date();
-  const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
-  
-  // Calculate days since Monday (Monday = 0)
+  const dayOfWeek = now.getDay();
   const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
   
-  // Get Monday of current week
   const mondayDate = new Date(now);
   mondayDate.setDate(now.getDate() - daysSinceMonday);
   mondayDate.setHours(0, 0, 0, 0);
   
-  // Generate array of all days in the week (Monday to Sunday)
   const weekDays = [];
   for (let i = 0; i < 7; i++) {
     const day = new Date(mondayDate);
     day.setDate(mondayDate.getDate() + i);
     weekDays.push({
-      date: day.toISOString().split('T')[0], // YYYY-MM-DD
+      date: day.toISOString().split('T')[0],
       dayName: day.toLocaleDateString('en-US', { weekday: 'long' }),
       isToday: day.toISOString().split('T')[0] === now.toISOString().split('T')[0]
     });
@@ -121,7 +112,7 @@ function getCurrentWeekDates() {
 }
 
 // ===================
-// DATA FETCHING WITH FULL PAGINATION
+// DATA FETCHING (unchanged)
 // ===================
 
 async function fetchAppointmentsForDay(date, token) {
@@ -132,9 +123,8 @@ async function fetchAppointmentsForDay(date, token) {
   let pageCount = 0;
   
   try {
-    while (url && pageCount < 50) { // Safety limit to prevent infinite loops
+    while (url && pageCount < 50) {
       pageCount++;
-      
       console.log(`     📄 Page ${pageCount}: Fetching up to 100 appointments...`);
       
       const response = await axios.get(url, {
@@ -152,7 +142,6 @@ async function fetchAppointmentsForDay(date, token) {
       allEntries.push(...pageEntries);
       console.log(`     ✅ Page ${pageCount}: ${pageAppointments.length} appointments found`);
       
-      // Check for next page link
       url = null;
       if (bundle.link) {
         const nextLink = bundle.link.find(link => link.relation === 'next');
@@ -162,7 +151,6 @@ async function fetchAppointmentsForDay(date, token) {
         }
       }
       
-      // Small delay between pages to be respectful
       if (url) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
@@ -197,7 +185,6 @@ async function fetchAllAppointments() {
   const allEntries = [];
   let totalAppointments = 0;
   
-  // Process each day sequentially with full pagination
   for (const day of weekInfo.weekDays) {
     const dayEntries = await fetchAppointmentsForDay(day, token);
     allEntries.push(...dayEntries);
@@ -205,7 +192,6 @@ async function fetchAllAppointments() {
     const dayAppointments = dayEntries.filter(entry => entry.resource.resourceType === 'Appointment').length;
     totalAppointments += dayAppointments;
     
-    // Small delay between days to be respectful to the API
     await new Promise(resolve => setTimeout(resolve, 200));
   }
   
@@ -214,10 +200,8 @@ async function fetchAllAppointments() {
   console.log(`   Total SN11 appointments: ${totalAppointments}`);
   console.log(`   Total resources: ${allEntries.length}`);
   console.log(`   Average per day: ${Math.round(totalAppointments / 7)} appointments`);
-  console.log(`   Note: This includes ALL appointments, not just first 100 per day`);
   console.log('');
   
-  // Return as FHIR Bundle format for processing
   return {
     resourceType: 'Bundle',
     type: 'searchset',
@@ -227,7 +211,7 @@ async function fetchAllAppointments() {
 }
 
 // ===================
-// OPTIMIZED BATCH RESOURCE FETCHING WITH 5 CONCURRENT WORKERS
+// OPTIMIZED BATCH RESOURCE FETCHING (unchanged)
 // ===================
 
 async function fetchPatientAndPractitionerData(appointmentEntries) {
@@ -236,7 +220,6 @@ async function fetchPatientAndPractitionerData(appointmentEntries) {
   const token = await getAuthToken();
   const resourceMap = new Map();
   
-  // Collect unique patient, practitioner, and location IDs
   const patientIds = new Set();
   const practitionerIds = new Set();
   const locationIds = new Set();
@@ -244,7 +227,6 @@ async function fetchPatientAndPractitionerData(appointmentEntries) {
   appointmentEntries.forEach(entry => {
     const apt = entry.resource;
     
-    // Get patient ID from extension
     const subjectExt = apt.extension?.find(ext => 
       ext.url?.includes('StructureDefinition/subject')
     );
@@ -253,7 +235,6 @@ async function fetchPatientAndPractitionerData(appointmentEntries) {
       patientIds.add(patientId);
     }
     
-    // Get practitioner ID from participant
     const nurseParticipant = apt.participant?.find(p => 
       p.actor?.reference?.startsWith('Practitioner/')
     );
@@ -262,7 +243,6 @@ async function fetchPatientAndPractitionerData(appointmentEntries) {
       practitionerIds.add(practitionerId);
     }
     
-    // Get location ID from extension
     const locationExt = apt.extension?.find(ext => 
       ext.url?.includes('service-location')
     );
@@ -274,7 +254,6 @@ async function fetchPatientAndPractitionerData(appointmentEntries) {
   
   console.log(`📊 Found ${patientIds.size} unique patients, ${practitionerIds.size} unique practitioners, ${locationIds.size} unique locations`);
   
-  // Batch fetch all resource types with concurrent workers
   await batchFetchResourcesConcurrent('Practitioner', practitionerIds, token, resourceMap);
   await batchFetchResourcesConcurrent('Patient', patientIds, token, resourceMap);
   await batchFetchResourcesConcurrent('Location', locationIds, token, resourceMap);
@@ -287,12 +266,11 @@ async function batchFetchResourcesConcurrent(resourceType, ids, token, resourceM
   if (ids.size === 0) return;
   
   const idsArray = Array.from(ids);
-  const batchSize = 10; // Keep batch size at 10 as requested
-  const maxConcurrency = 5; // Use 5 concurrent workers
+  const batchSize = 10;
+  const maxConcurrency = 5;
   
   console.log(`🔄 Fetching ${idsArray.length} ${resourceType} resources with ${maxConcurrency} concurrent workers (batch size: ${batchSize})...`);
   
-  // Create batches
   const batches = [];
   for (let i = 0; i < idsArray.length; i += batchSize) {
     batches.push({
@@ -303,7 +281,6 @@ async function batchFetchResourcesConcurrent(resourceType, ids, token, resourceM
   
   console.log(`   📦 Created ${batches.length} batches of up to ${batchSize} resources each`);
   
-  // Process batches with controlled concurrency
   const results = await processBatchesConcurrently(
     batches, 
     resourceType, 
@@ -325,13 +302,11 @@ async function batchFetchResourcesConcurrent(resourceType, ids, token, resourceM
 async function processBatchesConcurrently(batches, resourceType, token, resourceMap, maxConcurrency) {
   const results = [];
   
-  // Process batches in chunks to limit concurrency
   for (let i = 0; i < batches.length; i += maxConcurrency) {
     const concurrentBatches = batches.slice(i, i + maxConcurrency);
     
     console.log(`   🚀 Processing batch group ${Math.floor(i/maxConcurrency) + 1}/${Math.ceil(batches.length/maxConcurrency)} (${concurrentBatches.length} concurrent requests)`);
     
-    // Execute concurrent requests
     const batchPromises = concurrentBatches.map(batch => 
       fetchResourceBatchWithRetry(resourceType, batch.ids, token, resourceMap, batch.batchNumber)
     );
@@ -339,9 +314,8 @@ async function processBatchesConcurrently(batches, resourceType, token, resource
     const batchResults = await Promise.allSettled(batchPromises);
     results.push(...batchResults);
     
-    // Smart delay based on success rate
     const failureRate = batchResults.filter(r => r.status === 'rejected').length / batchResults.length;
-    const delay = failureRate > 0.3 ? 800 : failureRate > 0.1 ? 400 : 200; // Adaptive delay
+    const delay = failureRate > 0.3 ? 800 : failureRate > 0.1 ? 400 : 200;
     
     if (i + maxConcurrency < batches.length) {
       console.log(`   ⏱️  Waiting ${delay}ms before next batch group (failure rate: ${Math.round(failureRate * 100)}%)...`);
@@ -356,7 +330,6 @@ async function fetchResourceBatchWithRetry(resourceType, ids, token, resourceMap
   const maxRetries = 2;
   
   try {
-    // FHIR batch request using _id parameter
     const idFilter = ids.join(',');
     const url = `${CONFIG.apiBaseUrl}/${resourceType}?_id=${idFilter}&_count=50`;
     
@@ -377,7 +350,6 @@ async function fetchResourceBatchWithRetry(resourceType, ids, token, resourceMap
         resourceMap.set(`${resourceType}/${resource.id}`, resource);
         addedCount++;
         
-        // Show what we're extracting
         if (resourceType === 'Practitioner') {
           const name = extractName(resource);
           console.log(`       👩‍⚕️ ${resource.id}: ${name}`);
@@ -398,9 +370,8 @@ async function fetchResourceBatchWithRetry(resourceType, ids, token, resourceMap
     const status = error.response?.status;
     const message = error.response?.data?.issue?.[0]?.diagnostics || error.message;
     
-    // Retry on rate limiting or temporary errors
     if ((status === 429 || status >= 500) && retryCount < maxRetries) {
-      const retryDelay = Math.pow(2, retryCount) * 1000; // Exponential backoff
+      const retryDelay = Math.pow(2, retryCount) * 1000;
       console.log(`     🔄 Batch ${batchNumber}: Retrying in ${retryDelay}ms (attempt ${retryCount + 1}/${maxRetries + 1})`);
       await new Promise(resolve => setTimeout(resolve, retryDelay));
       return fetchResourceBatchWithRetry(resourceType, ids, token, resourceMap, batchNumber, retryCount + 1);
@@ -412,7 +383,7 @@ async function fetchResourceBatchWithRetry(resourceType, ids, token, resourceMap
 }
 
 // ===================
-// DATA PROCESSING
+// FIXED DATA PROCESSING
 // ===================
 
 function extractName(resource) {
@@ -424,10 +395,8 @@ function extractName(resource) {
 function extractLocationInfo(resource) {
   if (!resource) return { name: 'Unknown Location', address: '', latitude: null, longitude: null };
   
-  // Extract name
   const name = resource.name || 'Unknown Location';
   
-  // Extract address
   let address = '';
   if (resource.address) {
     const addr = resource.address;
@@ -439,7 +408,6 @@ function extractLocationInfo(resource) {
     address = parts.join(', ');
   }
   
-  // Extract coordinates from position
   let latitude = null;
   let longitude = null;
   if (resource.position) {
@@ -455,10 +423,34 @@ function extractLocationInfo(resource) {
   };
 }
 
+// FIXED: Extract nurse address from Practitioner resource
+function extractNurseAddressInfo(resource) {
+  if (!resource) return { name: 'Unknown Nurse', address: '' };
+  
+  const name = extractName(resource);
+  
+  // Extract nurse home/work address for geocoding
+  let address = '';
+  if (resource.address && resource.address.length > 0) {
+    // Use first address (could be home or work address)
+    const addr = resource.address[0];
+    const parts = [];
+    if (addr.line && addr.line[0]) parts.push(addr.line[0]);
+    if (addr.city) parts.push(addr.city);
+    if (addr.state) parts.push(addr.state);
+    if (addr.postalCode) parts.push(addr.postalCode);
+    address = parts.join(', ');
+  }
+  
+  return {
+    name,
+    address
+  };
+}
+
 function processBundle(bundle, resourceMap = new Map()) {
   if (!bundle.entry) return [];
   
-  // If no resourceMap provided, create from bundle entries
   if (resourceMap.size === 0) {
     bundle.entry.forEach(entry => {
       const resource = entry.resource;
@@ -466,17 +458,15 @@ function processBundle(bundle, resourceMap = new Map()) {
     });
   }
   
-  // Process appointments
   const appointments = bundle.entry
     .filter(entry => entry.resource.resourceType === 'Appointment')
     .map(entry => {
       const apt = entry.resource;
       
-      // Extract patient info from EXTENSIONS (HCHB specific)
+      // PATIENT INFO - Extract from extensions
       let patientRef = null;
       let patientId = null;
       
-      // Method 1: Check for HCHB subject extension
       const subjectExt = apt.extension?.find(ext => 
         ext.url?.includes('StructureDefinition/subject')
       );
@@ -485,7 +475,6 @@ function processBundle(bundle, resourceMap = new Map()) {
         patientId = patientRef.replace('Patient/', '');
       }
       
-      // Method 2: Check for supporting-information extension with PatientReference
       if (!patientRef) {
         const supportingExt = apt.extension?.find(ext => 
           ext.url?.includes('StructureDefinition/supporting-information')
@@ -499,7 +488,6 @@ function processBundle(bundle, resourceMap = new Map()) {
         }
       }
       
-      // Method 3: Fallback to standard FHIR subject (if present)
       if (!patientRef && apt.subject?.reference) {
         patientRef = apt.subject.reference;
         patientId = patientRef.replace('Patient/', '');
@@ -508,7 +496,7 @@ function processBundle(bundle, resourceMap = new Map()) {
       const patient = resourceMap.get(patientRef);
       const patientName = patient ? extractName(patient) : 'Unknown Patient';
       
-      // Extract nurse/practitioner info from participants
+      // NURSE INFO - Extract from participants
       const nurseParticipant = apt.participant?.find(p => 
         p.type?.[0]?.coding?.[0]?.code === 'PRF' || 
         p.actor?.reference?.startsWith('Practitioner/')
@@ -516,15 +504,20 @@ function processBundle(bundle, resourceMap = new Map()) {
       const nurseRef = nurseParticipant?.actor?.reference;
       const nurseId = nurseRef?.replace('Practitioner/', '');
       const nurse = resourceMap.get(nurseRef);
-      const nurseName = nurse ? extractName(nurse) : 'Unknown Nurse';
       
-      // Extract location info from extensions
+      // FIXED: Extract nurse name and address separately
+      const nurseName = nurse ? extractName(nurse) : 'Unknown Nurse';
+      const nurseAddressInfo = nurse ? extractNurseAddressInfo(nurse) : { name: 'Unknown Nurse', address: '' };
+      
+      // PATIENT LOCATION INFO - Extract from extensions (with coordinates)
       const locationExt = apt.extension?.find(ext => 
         ext.url?.includes('service-location')
       );
       const locationRef = locationExt?.valueReference?.reference;
       const locationId = locationRef?.replace('Location/', '');
       const location = resourceMap.get(locationRef);
+      
+      // FIXED: Patient location with coordinates (from Location resource)
       const locationInfo = location ? extractLocationInfo(location) : { 
         name: 'Unknown Location', 
         address: '', 
@@ -532,41 +525,53 @@ function processBundle(bundle, resourceMap = new Map()) {
         longitude: null 
       };
       
-      // Extract service info
+      // SERVICE INFO
       const serviceType = apt.serviceType?.[0]?.coding?.[0]?.display || 
                          apt.serviceType?.[0]?.text || '';
       const serviceCode = apt.serviceType?.[0]?.coding?.[0]?.code || '';
       
-      // Extract start date from extensions (HCHB specific)
-      let startDate = apt.start; // Standard FHIR field
+      // START DATE
+      let startDate = apt.start;
       
-      // HCHB stores dates in appointment-date-time extension
       const dateTimeExt = apt.extension?.find(ext => 
         ext.url?.includes('appointment-date-time')
       );
       if (dateTimeExt?.extension) {
         const startTimeExt = dateTimeExt.extension.find(ext => ext.url === 'AppointmentStartTime');
-        
         if (startTimeExt?.valueString) {
           startDate = startTimeExt.valueString;
         }
       }
       
       return {
-        fhirId: apt.id, // Store HCHB's ID as reference
+        fhirId: apt.id,
+        
+        // Patient info
         patientId,
         patientName,
+        
+        // Nurse info  
         nurseId,
         nurseName,
+        
+        // FIXED: Nurse location info (for geocoding)
+        nurseLocationName: nurseName,                    // Nurse name for display
+        nurseLocationAddress: nurseAddressInfo.address,  // Nurse address for geocoding
+        nurseLocationLatitude: null,                     // Will be populated by geocoding service
+        nurseLocationLongitude: null,                    // Will be populated by geocoding service
+        
+        // Appointment details
         startDate,
         status: apt.status,
         serviceType,
         serviceCode,
+        
+        // FIXED: Patient service location (with coordinates from Location resource)
         locationId,
         locationName: locationInfo.name,
         locationAddress: locationInfo.address,
-        locationLatitude: locationInfo.latitude,
-        locationLongitude: locationInfo.longitude,
+        locationLatitude: locationInfo.latitude,    // Patient coordinates from FHIR
+        locationLongitude: locationInfo.longitude,  // Patient coordinates from FHIR
       };
     });
     
@@ -574,22 +579,19 @@ function processBundle(bundle, resourceMap = new Map()) {
 }
 
 // ===================
-// MAIN SYNC FUNCTION
+// MAIN SYNC FUNCTION (unchanged)
 // ===================
 
 async function fullSync() {
   console.log('🚀 Starting HCHB weekly sync with FULL PAGINATION and 5 CONCURRENT WORKERS...');
   
   try {
-    // Fetch appointments for the current week with full pagination
     const startTime = Date.now();
     const bundle = await fetchAllAppointments();
     const fetchTime = Date.now() - startTime;
     
     console.log(`📊 Fetched ${bundle.total} SN11 appointments in ${Math.round(fetchTime / 1000)}s`);
-    console.log(`📈 This includes ALL appointments for the week, not just first 100 per day`);
     
-    // Show basic structure
     if (bundle.entry && bundle.entry.length > 0) {
       const resourceTypes = {};
       bundle.entry.forEach(entry => {
@@ -598,33 +600,28 @@ async function fullSync() {
       });
       console.log('📊 Resource breakdown:', resourceTypes);
       
-      // Fetch patient and practitioner data using optimized batch method with 5 concurrent workers
       const batchStartTime = Date.now();
       const resourceMap = await fetchPatientAndPractitionerData(bundle.entry);
       const batchTime = Date.now() - batchStartTime;
       
       console.log(`⚡ Concurrent batch fetching completed in ${Math.round(batchTime / 1000)}s`);
       
-      // Add fetched resources to the bundle for processing
       const allResources = new Map();
       
-      // Add original appointment resources
       bundle.entry.forEach(entry => {
         allResources.set(`${entry.resource.resourceType}/${entry.resource.id}`, entry.resource);
       });
       
-      // Add separately fetched resources
       resourceMap.forEach((resource, key) => {
         allResources.set(key, resource);
       });
       
       console.log(`📊 Total resources available for processing: ${allResources.size}`);
       
-      // Process with complete resource map
       const appointmentData = processBundle(bundle, allResources);
       console.log(`🔄 Processed ${appointmentData.length} appointments`);
       
-      // Show sample processed data
+      // Show sample processed data with FIXED fields
       if (appointmentData.length > 0) {
         console.log('\n📋 Sample processed data (first 3 appointments):');
         appointmentData.slice(0, 3).forEach((apt, i) => {
@@ -632,18 +629,18 @@ async function fullSync() {
           console.log(`    FHIR ID: ${apt.fhirId}`);
           console.log(`    Patient: ${apt.patientName} (${apt.patientId})`);
           console.log(`    Nurse: ${apt.nurseName} (${apt.nurseId})`);
+          console.log(`    🏠 Nurse Address: ${apt.nurseLocationAddress || 'No address'}`);
           console.log(`    Start: ${apt.startDate}`);
           console.log(`    Status: ${apt.status}`);
           console.log(`    Service: ${apt.serviceType} (${apt.serviceCode})`);
-          console.log(`    Location: ${apt.locationName} (${apt.locationId})`);
-          console.log(`    Address: ${apt.locationAddress}`);
+          console.log(`    📍 Patient Location: ${apt.locationName} (${apt.locationId})`);
+          console.log(`    📍 Patient Address: ${apt.locationAddress}`);
           if (apt.locationLatitude && apt.locationLongitude) {
-            console.log(`    Coordinates: ${apt.locationLatitude}, ${apt.locationLongitude}`);
+            console.log(`    📍 Patient Coordinates: ${apt.locationLatitude}, ${apt.locationLongitude}`);
           }
         });
       }
       
-      // Performance summary
       const totalTime = Date.now() - startTime;
       console.log(`\n📈 Performance Summary:`);
       console.log(`   Appointment fetching: ${Math.round(fetchTime / 1000)}s`);
@@ -651,18 +648,26 @@ async function fullSync() {
       console.log(`   Total sync time: ${Math.round(totalTime / 1000)}s`);
       console.log(`   Complete dataset: ${bundle.total} appointments (full pagination)`);
       
-      // Clear existing data
       const clearedCount = clearDatabase();
       
-      // Insert new data in batches to avoid SQLite variable limit
       if (appointmentData.length > 0) {
         await insertAppointmentsInBatches(appointmentData);
         console.log(`✅ Replaced ${clearedCount} old appointments with ${appointmentData.length} new SN11 appointments`);
+        
+        // Show counts for verification
+        const nurseAddressCount = appointmentData.filter(apt => apt.nurseLocationAddress && apt.nurseLocationAddress.trim() !== '').length;
+        const patientCoordCount = appointmentData.filter(apt => apt.locationLatitude && apt.locationLongitude).length;
+        
+        console.log(`\n🔍 Data Verification:`);
+        console.log(`   📋 Total appointments: ${appointmentData.length}`);
+        console.log(`   🏠 Appointments with nurse addresses: ${nurseAddressCount}/${appointmentData.length} (${Math.round((nurseAddressCount/appointmentData.length)*100)}%)`);
+        console.log(`   📍 Appointments with patient coordinates: ${patientCoordCount}/${appointmentData.length} (${Math.round((patientCoordCount/appointmentData.length)*100)}%)`);
+        console.log(`   💡 Next step: Run geocoding to add nurse coordinates`);
       } else {
         console.log(`⚠️  No SN11 appointments found for this week`);
       }
       
-      console.log('\n✅ Weekly sync with FULL PAGINATION and CONCURRENT WORKERS completed successfully!');
+      console.log('\n✅ Weekly sync with NURSE ADDRESSES and PATIENT COORDINATES completed successfully!');
       return { success: true, count: appointmentData.length, timeMs: totalTime };
     } else {
       console.log('❌ No appointments found in bundle');

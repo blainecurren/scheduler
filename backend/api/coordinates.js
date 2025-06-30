@@ -1,10 +1,10 @@
 // backend/api/coordinates.js
-// API endpoints for nurse coordinate geocoding
+// FIXED: API endpoints for nurse coordinate geocoding with correct Drizzle count syntax
 
 const express = require('express');
 const { geocodeAllNurseAddresses } = require('../services/azure-maps-service');
 const { db, appointments } = require('../db/config');
-const { isNotNull, isNull, and } = require('drizzle-orm');
+const { isNotNull, isNull, and, ne, sql } = require('drizzle-orm');
 
 const router = express.Router();
 
@@ -62,24 +62,26 @@ router.get('/status', async (req, res) => {
     
     const azureMapsConfigured = !!process.env.AZURE_MAPS_KEY;
     
+    // FIXED: Use sql template literals instead of db.$count()
+    
     // Quick check of database state
     const needsGeocodingCount = await db
-      .select({ count: db.$count() })
+      .select({ count: sql`count(*)` })
       .from(appointments)
       .where(
         and(
           isNotNull(appointments.nurseLocationAddress),
-          appointments.nurseLocationAddress.ne(''),
+          ne(appointments.nurseLocationAddress, ''),
           isNull(appointments.nurseLocationLatitude)
         )
       );
     
     const totalAppointments = await db
-      .select({ count: db.$count() })
+      .select({ count: sql`count(*)` })
       .from(appointments);
       
     const geocodedCount = await db
-      .select({ count: db.$count() })
+      .select({ count: sql`count(*)` })
       .from(appointments)
       .where(
         and(
@@ -95,7 +97,7 @@ router.get('/status', async (req, res) => {
       .where(
         and(
           isNotNull(appointments.nurseLocationAddress),
-          appointments.nurseLocationAddress.ne('')
+          ne(appointments.nurseLocationAddress, '')
         )
       );
       
@@ -127,7 +129,7 @@ router.get('/status', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('❌ Status check error:', error);
+    console.error('❌ Error checking geocoding status:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to check geocoding status'
@@ -141,136 +143,110 @@ router.get('/stats', async (req, res) => {
   try {
     console.log('📊 Fetching coordinate statistics...');
     
+    // FIXED: Use sql template literals for count operations
+    
     // Total appointments
-    const totalCount = await db
-      .select({ count: db.$count() })
-      .from(appointments);
+    const totalAppointments = await db.select({ 
+      count: sql`count(*)` 
+    }).from(appointments);
     
     // Appointments with nurse coordinates
-    const nursesWithCoords = await db
-      .select({ count: db.$count() })
-      .from(appointments)
-      .where(
-        and(
-          isNotNull(appointments.nurseLocationLatitude),
-          isNotNull(appointments.nurseLocationLongitude)
-        )
-      );
+    const appointmentsWithNurseCoords = await db.select({ 
+      count: sql`count(*)` 
+    })
+    .from(appointments)
+    .where(
+      and(
+        isNotNull(appointments.nurseLocationLatitude),
+        isNotNull(appointments.nurseLocationLongitude)
+      )
+    );
     
     // Appointments with patient coordinates
-    const patientsWithCoords = await db
-      .select({ count: db.$count() })
-      .from(appointments)
-      .where(
-        and(
-          isNotNull(appointments.locationLatitude),
-          isNotNull(appointments.locationLongitude)
-        )
-      );
+    const appointmentsWithPatientCoords = await db.select({ 
+      count: sql`count(*)` 
+    })
+    .from(appointments)
+    .where(
+      and(
+        isNotNull(appointments.locationLatitude),
+        isNotNull(appointments.locationLongitude)
+      )
+    );
     
-    // Appointments with both coordinates
-    const bothCoords = await db
-      .select({ count: db.$count() })
-      .from(appointments)
-      .where(
-        and(
-          isNotNull(appointments.nurseLocationLatitude),
-          isNotNull(appointments.nurseLocationLongitude),
-          isNotNull(appointments.locationLatitude),
-          isNotNull(appointments.locationLongitude)
-        )
-      );
+    // Appointments with both nurse and patient coordinates
+    const appointmentsWithBothCoords = await db.select({ 
+      count: sql`count(*)` 
+    })
+    .from(appointments)
+    .where(
+      and(
+        isNotNull(appointments.nurseLocationLatitude),
+        isNotNull(appointments.nurseLocationLongitude),
+        isNotNull(appointments.locationLatitude),
+        isNotNull(appointments.locationLongitude)
+      )
+    );
     
     // Unique nurses with addresses
     const uniqueNursesWithAddresses = await db
-      .selectDistinct({ nurseName: appointments.nurseName })
-      .from(appointments)
-      .where(
-        and(
-          isNotNull(appointments.nurseLocationAddress),
-          appointments.nurseLocationAddress.ne('')
-        )
-      );
-    
-    // Unique nurses with coordinates
-    const uniqueNursesWithCoords = await db
-      .selectDistinct({ nurseName: appointments.nurseName })
-      .from(appointments)
-      .where(
-        and(
-          isNotNull(appointments.nurseLocationLatitude),
-          isNotNull(appointments.nurseLocationLongitude)
-        )
-      );
-    
-    const stats = {
-      totalAppointments: totalCount[0]?.count || 0,
-      appointmentsWithNurseCoords: nursesWithCoords[0]?.count || 0,
-      appointmentsWithPatientCoords: patientsWithCoords[0]?.count || 0,
-      appointmentsWithBothCoords: bothCoords[0]?.count || 0,
-      uniqueNursesWithAddresses: uniqueNursesWithAddresses.length,
-      uniqueNursesWithCoords: uniqueNursesWithCoords.length,
-      geocodingProgress: uniqueNursesWithAddresses.length > 0 
-        ? Math.round((uniqueNursesWithCoords.length / uniqueNursesWithAddresses.length) * 100)
-        : 0,
-      mappableAppointments: bothCoords[0]?.count || 0
-    };
-    
-    console.log(`✅ Generated coordinate statistics: ${stats.mappableAppointments} mappable appointments`);
-    
-    res.json({
-      success: true,
-      data: stats
-    });
-    
-  } catch (error) {
-    console.error('❌ Statistics API error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch coordinate statistics'
-    });
-  }
-});
-
-// GET /api/coordinates/preview
-// Preview addresses that will be geocoded (useful for debugging)
-router.get('/preview', async (req, res) => {
-  try {
-    console.log('🔍 Fetching addresses that need geocoding...');
-    
-    const limit = parseInt(req.query.limit) || 10;
-    
-    const addressesNeedingGeocode = await db
-      .selectDistinct({
+      .selectDistinct({ 
         nurseName: appointments.nurseName,
-        nurseLocationAddress: appointments.nurseLocationAddress
+        address: appointments.nurseLocationAddress 
       })
       .from(appointments)
       .where(
         and(
           isNotNull(appointments.nurseLocationAddress),
-          appointments.nurseLocationAddress.ne(''),
-          isNull(appointments.nurseLocationLatitude)
+          ne(appointments.nurseLocationAddress, '')
         )
-      )
+      );
+      
+    // Unique nurses with coordinates
+    const uniqueNursesWithCoords = await db
+      .selectDistinct({ 
+        nurseName: appointments.nurseName 
+      })
+      .from(appointments)
+      .where(
+        and(
+          isNotNull(appointments.nurseLocationLatitude),
+          isNotNull(appointments.nurseLocationLongitude)
+        )
+      );
+    
+    // Nurse breakdown with coordinate counts
+    const nurseBreakdown = await db
+      .select({
+        nurseName: appointments.nurseName,
+        totalAppointments: sql`count(*)`,
+        withCoordinates: sql`sum(case when ${appointments.nurseLocationLatitude} is not null and ${appointments.nurseLocationLongitude} is not null then 1 else 0 end)`,
+        address: appointments.nurseLocationAddress
+      })
+      .from(appointments)
+      .where(isNotNull(appointments.nurseName))
       .groupBy(appointments.nurseName, appointments.nurseLocationAddress)
-      .limit(limit);
+      .orderBy(sql`count(*) desc`);
     
-    res.json({
-      success: true,
-      data: {
-        count: addressesNeedingGeocode.length,
-        addresses: addressesNeedingGeocode,
-        note: `Showing first ${limit} addresses. Use ?limit=N to see more.`
-      }
-    });
+    const stats = {
+      overview: {
+        totalAppointments: totalAppointments[0]?.count || 0,
+        appointmentsWithNurseCoords: appointmentsWithNurseCoords[0]?.count || 0,
+        appointmentsWithPatientCoords: appointmentsWithPatientCoords[0]?.count || 0,
+        appointmentsWithBothCoords: appointmentsWithBothCoords[0]?.count || 0,
+        uniqueNursesWithAddresses: uniqueNursesWithAddresses.length,
+        uniqueNursesWithCoords: uniqueNursesWithCoords.length
+      },
+      nurseBreakdown: nurseBreakdown
+    };
     
+    console.log(`✅ Statistics: ${stats.overview.totalAppointments} total appointments, ${stats.overview.uniqueNursesWithCoords}/${stats.overview.uniqueNursesWithAddresses} nurses geocoded`);
+
+    res.json(stats);
+
   } catch (error) {
-    console.error('❌ Preview API error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch address preview'
-    });
+    console.error('❌ Error fetching coordinate statistics:', error);
+    res.status(500).json({ error: 'Failed to fetch coordinate statistics' });
   }
 });
 

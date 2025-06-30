@@ -1,9 +1,9 @@
-// backend/services/nurse-coordinates.js
-// Separate service to geocode nurse addresses using Azure Maps
+// backend/services/azure-maps-service.js
+// FIXED: Azure Maps geocoding service with correct Drizzle ORM count queries
 
 const axios = require('axios');
 const { db, appointments } = require('../db/config');
-const { eq, isNotNull, isNull, and } = require('drizzle-orm');
+const { eq, isNotNull, isNull, and, ne, sql } = require('drizzle-orm');
 require('dotenv').config();
 
 // ===================
@@ -13,9 +13,11 @@ require('dotenv').config();
 const CONFIG = {
   azureMapsKey: process.env.AZURE_MAPS_KEY,
   azureMapsBaseUrl: 'https://atlas.microsoft.com/search/address/json',
-  timeout: 10000,
-  batchSize: 10,        // Process 10 addresses at a time
-  requestDelay: 100,    // 100ms between requests to avoid rate limiting
+  timeout: 15000,      // Increased timeout for concurrent requests
+  batchSize: 10,       // Process 10 addresses per batch
+  maxConcurrency: 5,   // 5 concurrent workers (like HCHB sync)
+  requestDelay: 100,   // 100ms between individual requests
+  batchDelay: 500,     // 500ms between batch groups
 };
 
 // ===================
@@ -72,25 +74,25 @@ async function geocodeAddress(address) {
 }
 
 // ===================
-// DATABASE OPERATIONS
+// FIXED DATABASE OPERATIONS
 // ===================
 
 async function getNursesWithoutCoordinates() {
   console.log('🔍 Finding nurses with addresses but no coordinates...');
   
   try {
-    // Get unique nurse addresses that need geocoding
+    // FIXED: Use sql template literal for count instead of db.$count()
     const nursesNeedingGeocode = await db
       .selectDistinct({
         nurseName: appointments.nurseName,
         nurseLocationAddress: appointments.nurseLocationAddress,
-        count: db.$count()
+        count: sql`count(*)`
       })
       .from(appointments)
       .where(
         and(
           isNotNull(appointments.nurseLocationAddress),    // Has address
-          appointments.nurseLocationAddress.ne(''),        // Address not empty
+          ne(appointments.nurseLocationAddress, ''),       // Address not empty
           isNull(appointments.nurseLocationLatitude)       // No coordinates yet
         )
       )
@@ -102,7 +104,7 @@ async function getNursesWithoutCoordinates() {
     if (nursesNeedingGeocode.length > 0) {
       console.log('\n📝 Sample addresses to geocode:');
       nursesNeedingGeocode.slice(0, 5).forEach((nurse, i) => {
-        console.log(`   ${i + 1}. ${nurse.nurseName}: "${nurse.nurseLocationAddress}"`);
+        console.log(`   ${i + 1}. ${nurse.nurseName}: ${nurse.nurseLocationAddress} (${nurse.count} appointments)`);
       });
       
       if (nursesNeedingGeocode.length > 5) {
@@ -114,19 +116,17 @@ async function getNursesWithoutCoordinates() {
     
   } catch (error) {
     console.error('❌ Error querying nurses without coordinates:', error);
-    return [];
+    throw error;
   }
 }
 
 async function updateNurseCoordinates(nurseName, address, latitude, longitude) {
   try {
-    // Update all appointments for this nurse with the coordinates
     const result = await db
       .update(appointments)
       .set({
         nurseLocationLatitude: latitude,
-        nurseLocationLongitude: longitude,
-        nurseLocationName: nurseName  // Also set the name for consistency
+        nurseLocationLongitude: longitude
       })
       .where(
         and(
@@ -135,124 +135,185 @@ async function updateNurseCoordinates(nurseName, address, latitude, longitude) {
         )
       );
     
-    return result;
-    
+    return { success: true };
   } catch (error) {
     console.error(`❌ Error updating coordinates for ${nurseName}:`, error);
-    throw error;
+    return { success: false, error: error.message };
   }
 }
 
 // ===================
-// BATCH PROCESSING
+// CONCURRENT BATCH PROCESSING (5 WORKERS)
 // ===================
 
 async function processNurseCoordinatesInBatches(nursesToGeocode) {
-  if (nursesToGeocode.length === 0) {
-    console.log('✅ No nurses need geocoding');
-    return { success: 0, failed: 0, skipped: 0 };
+  const results = { success: 0, failed: 0 };
+  const maxConcurrency = 5;  // 5 concurrent workers like HCHB sync
+  const batchSize = 10;      // Process 10 addresses per batch
+  
+  console.log(`🔄 Processing ${nursesToGeocode.length} nurses with ${maxConcurrency} CONCURRENT WORKERS...`);
+  
+  // Create batches
+  const batches = [];
+  for (let i = 0; i < nursesToGeocode.length; i += batchSize) {
+    batches.push({
+      nurses: nursesToGeocode.slice(i, i + batchSize),
+      batchNumber: Math.floor(i / batchSize) + 1
+    });
   }
   
-  console.log(`🚀 Starting geocoding of ${nursesToGeocode.length} nurse addresses...`);
+  console.log(`📦 Created ${batches.length} batches of up to ${batchSize} nurses each`);
   
-  const results = {
-    success: 0,
-    failed: 0,
-    skipped: 0
-  };
+  // Process batches with controlled concurrency
+  const batchResults = await processBatchesConcurrently(batches, maxConcurrency);
   
-  // Process in batches to avoid overwhelming the API
-  for (let i = 0; i < nursesToGeocode.length; i += CONFIG.batchSize) {
-    const batch = nursesToGeocode.slice(i, i + CONFIG.batchSize);
-    const batchNumber = Math.floor(i / CONFIG.batchSize) + 1;
-    const totalBatches = Math.ceil(nursesToGeocode.length / CONFIG.batchSize);
-    
-    console.log(`\n📦 Batch ${batchNumber}/${totalBatches}: Processing ${batch.length} addresses...`);
-    
-    for (const nurse of batch) {
-      console.log(`   🔄 Geocoding: ${nurse.nurseName} - "${nurse.nurseLocationAddress}"`);
-      
-      try {
-        const result = await geocodeAddress(nurse.nurseLocationAddress);
-        
-        if (result.latitude && result.longitude) {
-          // Update database with coordinates
-          await updateNurseCoordinates(
-            nurse.nurseName,
-            nurse.nurseLocationAddress,
-            result.latitude,
-            result.longitude
-          );
-          
-          results.success++;
-          console.log(`     ✅ Success: ${result.latitude}, ${result.longitude} (confidence: ${result.confidence})`);
-          
-        } else {
-          results.failed++;
-          console.log(`     ❌ Failed: ${result.error || 'No coordinates returned'}`);
-        }
-        
-      } catch (error) {
-        results.failed++;
-        console.error(`     ❌ Error: ${error.message}`);
-      }
-      
-      // Delay between requests to avoid rate limiting
-      if (CONFIG.requestDelay > 0) {
-        await new Promise(resolve => setTimeout(resolve, CONFIG.requestDelay));
-      }
+  // Aggregate results
+  batchResults.forEach(batchResult => {
+    if (batchResult.status === 'fulfilled') {
+      results.success += batchResult.value.success;
+      results.failed += batchResult.value.failed;
+    } else {
+      results.failed += batchResult.reason.count || 1;
     }
+  });
+  
+  const successCount = batchResults.filter(r => r.status === 'fulfilled').length;
+  const errorCount = batchResults.filter(r => r.status === 'rejected').length;
+  
+  console.log(`\n📊 Concurrent Processing Summary:`);
+  console.log(`   Successful batches: ${successCount}/${batches.length}`);
+  console.log(`   Failed batches: ${errorCount}/${batches.length}`);
+  console.log(`   Total successful geocodes: ${results.success}`);
+  console.log(`   Total failed geocodes: ${results.failed}`);
+  
+  return results;
+}
+
+async function processBatchesConcurrently(batches, maxConcurrency) {
+  const results = [];
+  
+  // Process batches in chunks to limit concurrency
+  for (let i = 0; i < batches.length; i += maxConcurrency) {
+    const concurrentBatches = batches.slice(i, i + maxConcurrency);
     
-    console.log(`   📊 Batch ${batchNumber} complete: ${results.success} success, ${results.failed} failed so far`);
+    console.log(`\n🚀 Processing batch group ${Math.floor(i/maxConcurrency) + 1}/${Math.ceil(batches.length/maxConcurrency)} (${concurrentBatches.length} concurrent workers)`);
     
-    // Longer delay between batches
-    if (i + CONFIG.batchSize < nursesToGeocode.length) {
-      console.log(`   ⏱️  Waiting before next batch...`);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    // Execute concurrent geocoding
+    const batchPromises = concurrentBatches.map(batch => 
+      processGeocodingBatch(batch.nurses, batch.batchNumber)
+    );
+    
+    const batchResults = await Promise.allSettled(batchPromises);
+    results.push(...batchResults);
+    
+    // Show batch group results
+    const groupSuccess = batchResults.filter(r => r.status === 'fulfilled').length;
+    const groupFailed = batchResults.filter(r => r.status === 'rejected').length;
+    console.log(`   📊 Batch group complete: ${groupSuccess} successful, ${groupFailed} failed`);
+    
+    // Adaptive delay based on failure rate
+    const failureRate = groupFailed / batchResults.length;
+    const delay = failureRate > 0.3 ? 2000 : failureRate > 0.1 ? 1000 : 500;
+    
+    if (i + maxConcurrency < batches.length) {
+      console.log(`   ⏱️  Waiting ${delay}ms before next batch group (failure rate: ${Math.round(failureRate * 100)}%)...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
   
   return results;
 }
 
+async function processGeocodingBatch(nurses, batchNumber) {
+  const batchResults = { success: 0, failed: 0 };
+  
+  console.log(`   📍 Batch ${batchNumber}: Starting geocoding for ${nurses.length} nurses...`);
+  
+  for (const nurse of nurses) {
+    try {
+      console.log(`     🗺️  Geocoding: ${nurse.nurseName} at "${nurse.nurseLocationAddress}"`);
+      
+      const geoResult = await geocodeAddress(nurse.nurseLocationAddress);
+      
+      if (geoResult.latitude && geoResult.longitude) {
+        const updateResult = await updateNurseCoordinates(
+          nurse.nurseName,
+          nurse.nurseLocationAddress,
+          geoResult.latitude,
+          geoResult.longitude
+        );
+        
+        if (updateResult.success) {
+          console.log(`     ✅ Success: ${nurse.nurseName} -> (${geoResult.latitude}, ${geoResult.longitude})`);
+          batchResults.success++;
+        } else {
+          console.log(`     ❌ Database update failed: ${nurse.nurseName}`);
+          batchResults.failed++;
+        }
+      } else {
+        console.log(`     ⚠️  No coordinates found: ${nurse.nurseName} - ${geoResult.error || 'Unknown error'}`);
+        batchResults.failed++;
+      }
+      
+      // Small delay between individual requests within batch
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+    } catch (error) {
+      console.error(`     ❌ Error processing ${nurse.nurseName}:`, error.message);
+      batchResults.failed++;
+    }
+  }
+  
+  console.log(`   ✅ Batch ${batchNumber} complete: ${batchResults.success} successful, ${batchResults.failed} failed`);
+  return batchResults;
+}
+
 // ===================
-// STATISTICS AND REPORTING
+// FIXED STATISTICS
 // ===================
 
 async function getCoordinateStatistics() {
   console.log('📊 Generating coordinate statistics...');
   
   try {
-    // Total appointments
-    const totalCount = await db
-      .select({ count: db.$count() })
-      .from(appointments);
+    // FIXED: Use sql template literals for all count operations
     
-    // Nurses with coordinates
-    const nursesWithCoords = await db
-      .select({ count: db.$count() })
-      .from(appointments)
-      .where(
-        and(
-          isNotNull(appointments.nurseLocationLatitude),
-          isNotNull(appointments.nurseLocationLongitude)
-        )
-      );
+    // Total appointments
+    const totalAppointments = await db.select({ 
+      count: sql`count(*)` 
+    }).from(appointments);
+    
+    // Appointments with nurse coordinates
+    const appointmentsWithNurseCoords = await db.select({ 
+      count: sql`count(*)` 
+    })
+    .from(appointments)
+    .where(
+      and(
+        isNotNull(appointments.nurseLocationLatitude),
+        isNotNull(appointments.nurseLocationLongitude)
+      )
+    );
     
     // Unique nurses with addresses
     const uniqueNursesWithAddresses = await db
-      .selectDistinct({ nurseName: appointments.nurseName })
+      .selectDistinct({ 
+        nurseName: appointments.nurseName,
+        address: appointments.nurseLocationAddress 
+      })
       .from(appointments)
       .where(
         and(
           isNotNull(appointments.nurseLocationAddress),
-          appointments.nurseLocationAddress.ne('')
+          ne(appointments.nurseLocationAddress, '')
         )
       );
-    
+      
     // Unique nurses with coordinates
     const uniqueNursesWithCoords = await db
-      .selectDistinct({ nurseName: appointments.nurseName })
+      .selectDistinct({ 
+        nurseName: appointments.nurseName 
+      })
       .from(appointments)
       .where(
         and(
@@ -262,8 +323,8 @@ async function getCoordinateStatistics() {
       );
     
     const stats = {
-      totalAppointments: totalCount[0]?.count || 0,
-      appointmentsWithNurseCoords: nursesWithCoords[0]?.count || 0,
+      totalAppointments: totalAppointments[0]?.count || 0,
+      appointmentsWithNurseCoords: appointmentsWithNurseCoords[0]?.count || 0,
       uniqueNursesWithAddresses: uniqueNursesWithAddresses.length,
       uniqueNursesWithCoords: uniqueNursesWithCoords.length
     };
@@ -286,7 +347,7 @@ async function getCoordinateStatistics() {
 // MAIN FUNCTION
 // ===================
 
-async function geocodeNurseAddresses() {
+async function geocodeAllNurseAddresses() {
   console.log('🗺️  Starting nurse address geocoding service...');
   
   // Validate Azure Maps configuration
@@ -304,7 +365,7 @@ async function geocodeNurseAddresses() {
     if (nursesToGeocode.length === 0) {
       console.log('✅ All nurse addresses already have coordinates!');
       await getCoordinateStatistics();
-      return { success: true, message: 'No geocoding needed' };
+      return { success: true, message: 'No geocoding needed', processed: 0, successful: 0, failed: 0 };
     }
     
     // Process geocoding in batches
@@ -339,51 +400,22 @@ async function geocodeNurseAddresses() {
 }
 
 // ===================
-// API ENDPOINT FOR TRIGGERING GEOCODING
-// ===================
-
-async function geocodeEndpoint(req, res) {
-  try {
-    console.log('🔄 Geocoding triggered via API...');
-    const result = await geocodeNurseAddresses();
-    
-    if (result.success) {
-      res.json({
-        success: true,
-        message: 'Geocoding completed successfully',
-        data: result
-      });
-    } else {
-      res.status(500).json({
-        success: false,
-        error: result.error || 'Geocoding failed'
-      });
-    }
-    
-  } catch (error) {
-    console.error('❌ Geocoding API error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
-  }
-}
-
-// ===================
 // EXPORTS & CLI
 // ===================
 
 module.exports = { 
-  geocodeNurseAddresses, 
-  geocodeEndpoint,
-  getCoordinateStatistics 
+  geocodeAllNurseAddresses, 
+  getCoordinateStatistics,
+  geocodeAddress,
+  getNursesWithoutCoordinates
 };
 
 if (require.main === module) {
   const { initializeDatabase } = require('../db/config');
   
   initializeDatabase();
-  geocodeNurseAddresses().then(result => {
+  geocodeAllNurseAddresses().then(result => {
+    console.log('\n🏁 Geocoding process finished:', result.success ? 'SUCCESS' : 'FAILED');
     process.exit(result.success ? 0 : 1);
   });
 }
