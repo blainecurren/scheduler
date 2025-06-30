@@ -28,8 +28,8 @@ function App() {
                     id: "nurse1",
                     name: "Jane Smith",
                     title: "RN",
-                    address: "123 Main St, Austin, TX",
-                    location: { lat: 30.2747, lng: -97.7404 },
+                    address: "123 Main St, Dallas, TX",
+                    location: { lat: 32.7767, lng: -96.797 },
                   },
                 ]}
                 patientLocations={[
@@ -37,23 +37,24 @@ function App() {
                     id: "patient1",
                     name: "Robert Johnson",
                     appointmentTime: "09:00 AM",
-                    address: "456 Oak St, Austin, TX",
-                    location: { lat: 30.2747, lng: -97.7404 },
+                    address: "456 Oak St, Fort Worth, TX",
+                    location: { lat: 32.7555, lng: -97.3308 },
                   },
                   {
                     id: "patient2",
                     name: "Sarah Miller",
                     appointmentTime: "10:30 AM",
-                    address: "789 Pine St, Austin, TX",
-                    location: { lat: 30.2843, lng: -97.7466 },
+                    address: "789 Pine St, Arlington, TX",
+                    location: { lat: 32.7357, lng: -97.1081 },
                   },
                 ]}
                 routes={[]}
-                center={{ lat: 30.2672, lng: -97.7431 }}
-                zoom={12}
+                center={{ lat: 32.75, lng: -97.03 }}
+                zoom={11}
               />
             }
           />
+
           <Route path="/routes" element={<RouteOptimizer />} />
           <Route path="/nurse-map" element={<NurseLocationMap />} />
         </Routes>

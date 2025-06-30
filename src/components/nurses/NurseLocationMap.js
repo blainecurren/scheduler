@@ -45,16 +45,16 @@ const NurseLocationMap = () => {
     new Date().toISOString().split("T")[0]
   );
   const [mappableAppointments, setMappableAppointments] = useState([]);
+  const [mapCenter, setMapCenter] = useState({ lat: 32.75, lng: -97.03 }); // Default to DFW area, TX
   const [showAppointments, setShowAppointments] = useState(false);
-  const [mapCenter, setMapCenter] = useState({ lat: 30.2672, lng: -97.7431 }); // Default to Austin, TX
   const [zoomLevel, setZoomLevel] = useState(12);
 
-  const { 
-    loading, 
-    error, 
-    getFilterOptions, 
+  const {
+    loading,
+    error,
+    getFilterOptions,
     getMappableAppointments,
-    clearError 
+    clearError,
   } = useAPIClient();
 
   // Load nurses from filter options on component mount
@@ -83,10 +83,10 @@ const NurseLocationMap = () => {
     const fetchMappableAppointments = async () => {
       try {
         clearError();
-        
+
         const filters = {
           date: selectedDate,
-          hasCoordinates: 'true'
+          hasCoordinates: "true",
         };
 
         // Add nurse filter if specific nurse selected
@@ -95,12 +95,15 @@ const NurseLocationMap = () => {
         }
 
         const data = await getMappableAppointments(filters);
-        
+
         if (data?.allAppointments) {
           setMappableAppointments(data.allAppointments);
-          
+
           // Auto-center map on first appointment if available
-          if (data.allAppointments.length > 0 && data.allAppointments[0].latitude) {
+          if (
+            data.allAppointments.length > 0 &&
+            data.allAppointments[0].latitude
+          ) {
             setMapCenter({
               lat: parseFloat(data.allAppointments[0].latitude),
               lng: parseFloat(data.allAppointments[0].longitude),
@@ -114,7 +117,13 @@ const NurseLocationMap = () => {
     };
 
     fetchMappableAppointments();
-  }, [selectedNurse, selectedDate, showAppointments, getMappableAppointments, clearError]);
+  }, [
+    selectedNurse,
+    selectedDate,
+    showAppointments,
+    getMappableAppointments,
+    clearError,
+  ]);
 
   const handleNurseChange = (e) => {
     setSelectedNurse(e.target.value);
@@ -130,18 +139,18 @@ const NurseLocationMap = () => {
 
   // Format time for display
   const formatTime = (dateString) => {
-    if (!dateString) return 'N/A';
-    
+    if (!dateString) return "N/A";
+
     try {
       let date;
-      if (dateString.includes('/')) {
-        // Format: "06/27/2025 10:30:00" 
+      if (dateString.includes("/")) {
+        // Format: "06/27/2025 10:30:00"
         date = new Date(dateString);
       } else {
         // ISO format
         date = new Date(dateString);
       }
-      
+
       return date.toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
@@ -156,7 +165,7 @@ const NurseLocationMap = () => {
 
   // Filter appointments for selected nurse (if any)
   const nurseAppointments = selectedNurse
-    ? mappableAppointments.filter(apt => apt.nurseId === selectedNurse)
+    ? mappableAppointments.filter((apt) => apt.nurseId === selectedNurse)
     : mappableAppointments;
 
   if (loading && nurses.length === 0) {
@@ -208,7 +217,9 @@ const NurseLocationMap = () => {
         {error && (
           <div className="error-message">
             <p>⚠️ {error}</p>
-            <button onClick={clearError} className="error-dismiss">×</button>
+            <button onClick={clearError} className="error-dismiss">
+              ×
+            </button>
           </div>
         )}
       </div>
@@ -225,39 +236,54 @@ const NurseLocationMap = () => {
           />
 
           {/* Patient appointment markers */}
-          {showAppointments && nurseAppointments.map((appointment, index) => {
-            // Only show appointments with valid coordinates
-            if (!appointment.latitude || !appointment.longitude) return null;
-            
-            const lat = parseFloat(appointment.latitude);
-            const lng = parseFloat(appointment.longitude);
-            
-            if (isNaN(lat) || isNaN(lng)) return null;
+          {showAppointments &&
+            nurseAppointments.map((appointment, index) => {
+              // Only show appointments with valid coordinates
+              if (!appointment.latitude || !appointment.longitude) return null;
 
-            return (
-              <Marker
-                key={`appointment-${appointment.id}-${index}`}
-                position={[lat, lng]}
-                icon={patientIcon}
-              >
-                <Popup>
-                  <div className="marker-popup">
-                    <h3>{appointment.patientName}</h3>
-                    <p><strong>Time:</strong> {formatTime(appointment.startDate)}</p>
-                    <p><strong>Nurse:</strong> {appointment.nurseName}</p>
-                    <p><strong>Service:</strong> {appointment.serviceType}</p>
-                    <p><strong>Location:</strong> {appointment.locationName}</p>
-                    <p><strong>Address:</strong> {appointment.locationAddress}</p>
-                    <p><strong>Status:</strong> 
-                      <span className={`status-badge ${appointment.status?.toLowerCase()}`}>
-                        {appointment.status}
-                      </span>
-                    </p>
-                  </div>
-                </Popup>
-              </Marker>
-            );
-          })}
+              const lat = parseFloat(appointment.latitude);
+              const lng = parseFloat(appointment.longitude);
+
+              if (isNaN(lat) || isNaN(lng)) return null;
+
+              return (
+                <Marker
+                  key={`appointment-${appointment.id}-${index}`}
+                  position={[lat, lng]}
+                  icon={patientIcon}
+                >
+                  <Popup>
+                    <div className="marker-popup">
+                      <h3>{appointment.patientName}</h3>
+                      <p>
+                        <strong>Time:</strong>{" "}
+                        {formatTime(appointment.startDate)}
+                      </p>
+                      <p>
+                        <strong>Nurse:</strong> {appointment.nurseName}
+                      </p>
+                      <p>
+                        <strong>Service:</strong> {appointment.serviceType}
+                      </p>
+                      <p>
+                        <strong>Location:</strong> {appointment.locationName}
+                      </p>
+                      <p>
+                        <strong>Address:</strong> {appointment.locationAddress}
+                      </p>
+                      <p>
+                        <strong>Status:</strong>
+                        <span
+                          className={`status-badge ${appointment.status?.toLowerCase()}`}
+                        >
+                          {appointment.status}
+                        </span>
+                      </p>
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            })}
         </MapContainer>
       </div>
 
@@ -266,7 +292,9 @@ const NurseLocationMap = () => {
         {selectedNurseData ? (
           <div className="nurse-info">
             <h3>{selectedNurseData.name}</h3>
-            <p><strong>ID:</strong> {selectedNurseData.id}</p>
+            <p>
+              <strong>ID:</strong> {selectedNurseData.id}
+            </p>
           </div>
         ) : (
           <div className="nurse-info">
@@ -284,12 +312,16 @@ const NurseLocationMap = () => {
             )}
             {!loading && nurseAppointments.length > 0 && (
               <div>
-                <p><strong>{nurseAppointments.length}</strong> appointments with coordinates</p>
+                <p>
+                  <strong>{nurseAppointments.length}</strong> appointments with
+                  coordinates
+                </p>
                 <ul className="appointments-list">
                   {nurseAppointments.slice(0, 5).map((appointment) => (
                     <li key={appointment.id} className="appointment-item">
                       <p>
-                        <strong>{formatTime(appointment.startDate)}</strong> - {appointment.patientName}
+                        <strong>{formatTime(appointment.startDate)}</strong> -{" "}
+                        {appointment.patientName}
                       </p>
                       <p className="appointment-location">
                         📍 {appointment.locationName}

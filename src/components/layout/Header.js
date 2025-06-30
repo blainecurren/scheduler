@@ -1,34 +1,65 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import './Header.css';
+import React from "react";
+import { NavLink } from "react-router-dom";
+import "./Header.css";
 
 const Header = () => {
   return (
     <header className="app-header">
       <div className="logo-container">
-        <Link to="/" className="logo">
+        <NavLink to="/" className="logo">
           <h1>Nurse Scheduler</h1>
-        </Link>
+        </NavLink>
       </div>
       <nav className="main-nav">
         <ul>
           <li>
-            <Link to="/">Schedule</Link>
+            <NavLink
+              to="/"
+              className={({ isActive }) => (isActive ? "active" : "")}
+              end
+            >
+              Schedule
+            </NavLink>
           </li>
           <li>
-            <Link to="/nurses">Nurses</Link>
+            <NavLink
+              to="/nurses"
+              className={({ isActive }) => (isActive ? "active" : "")}
+            >
+              Nurses
+            </NavLink>
           </li>
           <li>
-            <Link to="/patients">Patients</Link>
+            <NavLink
+              to="/patients"
+              className={({ isActive }) => (isActive ? "active" : "")}
+            >
+              Patients
+            </NavLink>
           </li>
           <li>
-            <Link to="/appointments">Appointments</Link>
+            <NavLink
+              to="/appointments"
+              className={({ isActive }) => (isActive ? "active" : "")}
+            >
+              Appointments
+            </NavLink>
           </li>
           <li>
-            <Link to="/map" className="active">Map</Link>
+            <NavLink
+              to="/map"
+              className={({ isActive }) => (isActive ? "active" : "")}
+            >
+              Map
+            </NavLink>
           </li>
           <li>
-            <Link to="/routes">Routes</Link>
+            <NavLink
+              to="/routes"
+              className={({ isActive }) => (isActive ? "active" : "")}
+            >
+              Routes
+            </NavLink>
           </li>
         </ul>
       </nav>

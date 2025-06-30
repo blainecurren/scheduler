@@ -1,12 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import './MapView.css';
+import React, { useState, useEffect } from "react";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  Polyline,
+} from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import "./MapView.css";
 
 // Fix for Leaflet marker images
-import icon from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+import icon from "leaflet/dist/images/marker-icon.png";
+import iconShadow from "leaflet/dist/images/marker-shadow.png";
 
 const DefaultIcon = L.icon({
   iconUrl: icon,
@@ -18,44 +24,46 @@ const DefaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
-const MapView = ({ 
-  nurseLocations = [], 
-  patientLocations = [], 
+const MapView = ({
+  nurseLocations = [],
+  patientLocations = [],
   routes = [],
-  center = { lat: 30.2672, lng: -97.7431 }, // Default center (Austin, TX)
-  zoom = 12
+  center = { lat: 32.75, lng: -97.03 }, // Default center (DFW area, TX)
+  zoom = 11,
 }) => {
   // Custom marker colors
   const nurseIcon = L.icon({
     ...DefaultIcon.options,
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+    iconUrl:
+      "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
     iconSize: [25, 41],
     iconAnchor: [12, 41],
   });
 
   const patientIcon = L.icon({
     ...DefaultIcon.options,
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+    iconUrl:
+      "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
     iconSize: [25, 41],
     iconAnchor: [12, 41],
   });
 
   return (
     <div className="map-container">
-      <MapContainer 
-        center={[center.lat, center.lng]} 
-        zoom={zoom} 
-        style={{ height: '100%', width: '100%' }}
+      <MapContainer
+        center={[center.lat, center.lng]}
+        zoom={zoom}
+        style={{ height: "100%", width: "100%" }}
       >
         {/* Base map tiles */}
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        
+
         {/* Nurse locations */}
         {nurseLocations.map((nurse, index) => (
-          <Marker 
+          <Marker
             key={`nurse-${index}`}
             position={[nurse.location.lat, nurse.location.lng]}
             icon={nurseIcon}
@@ -69,10 +77,10 @@ const MapView = ({
             </Popup>
           </Marker>
         ))}
-        
+
         {/* Patient locations */}
         {patientLocations.map((patient, index) => (
-          <Marker 
+          <Marker
             key={`patient-${index}`}
             position={[patient.location.lat, patient.location.lng]}
             icon={patientIcon}
@@ -86,12 +94,12 @@ const MapView = ({
             </Popup>
           </Marker>
         ))}
-        
+
         {/* Routes as polylines */}
         {routes.map((route, index) => (
-          <Polyline 
+          <Polyline
             key={`route-${index}`}
-            positions={route.points.map(point => [point.lat, point.lng])}
+            positions={route.points.map((point) => [point.lat, point.lng])}
             color="#0078d4"
             weight={4}
             opacity={0.7}

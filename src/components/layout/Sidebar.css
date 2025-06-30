@@ -41,6 +41,11 @@
   font-size: 0.9rem;
 }
 
+.select-dropdown:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .date-picker {
   width: 100%;
   padding: 0.6rem;
@@ -74,6 +79,11 @@
   background-color: #006abb;
 }
 
+.btn-primary:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
 .btn-secondary {
   background-color: #f3f3f3;
   color: #333;
@@ -102,4 +112,36 @@
 .stat-value {
   font-weight: 600;
   color: #0078d4;
+}
+
+.error-message {
+  background-color: #fee;
+  border: 1px solid #fcc;
+  border-radius: 4px;
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  color: #c00;
+  font-size: 0.85rem;
+}
+
+.error-message p {
+  margin: 0;
+}
+
+.error-dismiss {
+  background: none;
+  border: none;
+  color: #c00;
+  cursor: pointer;
+  float: right;
+  font-size: 1.2rem;
+  line-height: 1;
+  margin-left: 0.5rem;
+}
+
+.loading-stats {
+  color: #666;
+  font-style: italic;
+  text-align: center;
+  padding: 1rem 0;
 }

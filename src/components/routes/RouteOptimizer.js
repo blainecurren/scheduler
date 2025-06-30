@@ -19,13 +19,14 @@ const RouteOptimizer = () => {
   ];
 
   // Example dummy data for map demonstration
+
   const sampleNurseLocations = [
     {
       id: "nurse1",
       name: "Jane Smith",
       title: "RN",
-      address: "123 Main St, Austin, TX",
-      location: { lat: 30.2672, lng: -97.7431 },
+      address: "123 Main St, Dallas, TX",
+      location: { lat: 32.7767, lng: -96.797 },
     },
   ];
 
@@ -34,22 +35,22 @@ const RouteOptimizer = () => {
       id: "patient1",
       name: "Bob Johnson",
       appointmentTime: "09:00 AM",
-      address: "456 Oak St, Austin, TX",
-      location: { lat: 30.2747, lng: -97.7404 },
+      address: "456 Oak St, Fort Worth, TX",
+      location: { lat: 32.7555, lng: -97.3308 },
     },
     {
       id: "patient2",
       name: "Sarah Miller",
       appointmentTime: "10:30 AM",
-      address: "789 Pine St, Austin, TX",
-      location: { lat: 30.2843, lng: -97.7466 },
+      address: "789 Pine St, Arlington, TX",
+      location: { lat: 32.7357, lng: -97.1081 },
     },
     {
       id: "patient3",
       name: "David Wilson",
       appointmentTime: "01:15 PM",
-      address: "101 Maple Ave, Austin, TX",
-      location: { lat: 30.2922, lng: -97.7398 },
+      address: "101 Maple Ave, Irving, TX",
+      location: { lat: 32.814, lng: -96.9489 },
     },
   ];
 
@@ -76,16 +77,15 @@ const RouteOptimizer = () => {
       // Example route for demonstration
       const sampleRoute = {
         points: [
-          { lat: 30.2672, lng: -97.7431 }, // Start (nurse location)
-          { lat: 30.2747, lng: -97.7404 }, // Patient 1
-          { lat: 30.2843, lng: -97.7466 }, // Patient 2
-          { lat: 30.2922, lng: -97.7398 }, // Patient 3
-          { lat: 30.2672, lng: -97.7431 }, // Back to start
+          { lat: 32.7767, lng: -96.797 }, // Start (nurse location - Dallas)
+          { lat: 32.7555, lng: -97.3308 }, // Patient 1 - Fort Worth
+          { lat: 32.7357, lng: -97.1081 }, // Patient 2 - Arlington
+          { lat: 32.814, lng: -96.9489 }, // Patient 3 - Irving
+          { lat: 32.7767, lng: -96.797 }, // Back to start - Dallas
         ],
         distance: 15000, // 15 km in meters
         time: 1800000, // 30 minutes in milliseconds
       };
-
       setRoute(sampleRoute);
     } catch (error) {
       console.error("Error generating route:", error);
