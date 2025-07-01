@@ -3,7 +3,8 @@ import "./Sidebar.css";
 
 const Sidebar = () => {
   const [nurses, setNurses] = useState([]);
-  const [selectedNurse, setSelectedNurse] = useState("");
+  const [selectedNurses, setSelectedNurses] = useState([]);
+  const [showNurseDropdown, setShowNurseDropdown] = useState(false);
   const [selectedDate, setSelectedDate] = useState(
     new Date().toISOString().split("T")[0]
   );
@@ -80,6 +81,35 @@ const Sidebar = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Handle nurse selection
+  const handleNurseToggle = (nurseId) => {
+    setSelectedNurses((prev) => {
+      if (prev.includes(nurseId)) {
+        return prev.filter((id) => id !== nurseId);
+      } else {
+        return [...prev, nurseId];
+      }
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedNurses.length === nurses.length) {
+      setSelectedNurses([]);
+    } else {
+      setSelectedNurses(nurses.map((nurse) => nurse.id));
+    }
+  };
+
+  const getSelectedNursesText = () => {
+    if (selectedNurses.length === 0) return "Select Nurses";
+    if (selectedNurses.length === 1) {
+      const nurse = nurses.find((n) => n.id === selectedNurses[0]);
+      return nurse ? nurse.name : "1 nurse selected";
+    }
+    if (selectedNurses.length === nurses.length) return "All nurses selected";
+    return `${selectedNurses.length} nurses selected`;
+  };
 
   // Setup functions
   const addSetupLog = (message, type = "info") => {
@@ -174,19 +204,21 @@ const Sidebar = () => {
     }
   };
 
-  // Calculate statistics for the selected date and nurse
+  // Calculate statistics for the selected date and nurses
   const calculateStats = () => {
     // Default values
     let totalVisits = 0;
     let totalDistance = 0;
     let estimatedTime = 0;
 
-    // If a nurse is selected, show their stats
-    if (selectedNurse && stats.byNurse) {
-      const nurseStats = stats.byNurse.find((n) => n.nurseId === selectedNurse);
-      if (nurseStats) {
-        totalVisits = nurseStats.count || 0;
-      }
+    // If nurses are selected, show their combined stats
+    if (selectedNurses.length > 0 && stats.byNurse) {
+      selectedNurses.forEach((nurseId) => {
+        const nurseStats = stats.byNurse.find((n) => n.nurseId === nurseId);
+        if (nurseStats) {
+          totalVisits += nurseStats.count || 0;
+        }
+      });
     } else {
       // Show total stats for all nurses
       totalVisits = stats.total || 0;
@@ -209,7 +241,7 @@ const Sidebar = () => {
     // This would typically be handled by a state management solution
     // or passed as a prop from the parent component
     console.log("Apply filters:", {
-      nurse: selectedNurse,
+      nurses: selectedNurses,
       date: selectedDate,
       routeOption,
     });
@@ -219,7 +251,7 @@ const Sidebar = () => {
   };
 
   const handleReset = () => {
-    setSelectedNurse("");
+    setSelectedNurses([]);
     setSelectedDate(new Date().toISOString().split("T")[0]);
     setRouteOption("optimized");
   };
@@ -247,21 +279,49 @@ const Sidebar = () => {
         )}
 
         <div className="filter-section">
-          <label htmlFor="nurseSelect">Select Nurse:</label>
-          <select
-            id="nurseSelect"
-            className="select-dropdown"
-            value={selectedNurse}
-            onChange={(e) => setSelectedNurse(e.target.value)}
-            disabled={loading}
-          >
-            <option value="">All Nurses</option>
-            {nurses.map((nurse) => (
-              <option key={nurse.id} value={nurse.id}>
-                {nurse.name}
-              </option>
-            ))}
-          </select>
+          <label htmlFor="nurseSelect">Select Nurses:</label>
+          <div className="nurse-multiselect">
+            <button
+              className="multiselect-toggle"
+              onClick={() => setShowNurseDropdown(!showNurseDropdown)}
+              disabled={loading}
+            >
+              <span>{getSelectedNursesText()}</span>
+              <span className="dropdown-arrow">
+                {showNurseDropdown ? "▲" : "▼"}
+              </span>
+            </button>
+
+            {showNurseDropdown && (
+              <div className="multiselect-dropdown">
+                <div className="multiselect-header">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={
+                        selectedNurses.length === nurses.length &&
+                        nurses.length > 0
+                      }
+                      onChange={handleSelectAll}
+                    />
+                    <span>Select All</span>
+                  </label>
+                </div>
+                <div className="multiselect-list">
+                  {nurses.map((nurse) => (
+                    <label key={nurse.id} className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={selectedNurses.includes(nurse.id)}
+                        onChange={() => handleNurseToggle(nurse.id)}
+                      />
+                      <span>{nurse.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="filter-section">
@@ -321,12 +381,10 @@ const Sidebar = () => {
               <span className="stat-label">Estimated Time:</span>
               <span className="stat-value">{formatTime(estimatedTime)}</span>
             </div>
-            {selectedNurse && (
+            {selectedNurses.length > 0 && (
               <div className="stat-item">
-                <span className="stat-label">Status:</span>
-                <span className="stat-value">
-                  {stats.byStatus?.fulfilled || 0} completed
-                </span>
+                <span className="stat-label">Selected Nurses:</span>
+                <span className="stat-value">{selectedNurses.length}</span>
               </div>
             )}
           </>
