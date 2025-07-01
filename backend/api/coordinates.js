@@ -2,7 +2,7 @@
 // FIXED: API endpoints for nurse coordinate geocoding with correct Drizzle count syntax
 
 const express = require('express');
-const { geocodeAllNurseAddresses } = require('../services/azure-maps-service');
+const { geocodeAllNurseAddresses } = require('../services/azure-geocoding');
 const { db, appointments } = require('../db/config');
 const { isNotNull, isNull, and, ne, sql } = require('drizzle-orm');
 
