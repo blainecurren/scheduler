@@ -1,3 +1,4 @@
+// src/components/layout/Header/Header.js
 import React from "react";
 import { NavLink } from "react-router-dom";
 import "./Header.css";
@@ -29,6 +30,7 @@ const Header = () => {
               Schedule
             </NavLink>
           </li>
+          {/* Commenting out unused tabs for now
           <li>
             <NavLink
               to="/nurses"
@@ -61,6 +63,7 @@ const Header = () => {
               Routes
             </NavLink>
           </li>
+          */}
         </ul>
       </nav>
     </header>

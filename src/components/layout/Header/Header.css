@@ -1,16 +1,18 @@
+/* src/components/layout/Header/Header.css */
 .app-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 0 2rem;
   height: 70px;
   background-color: #ffffff;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  position: relative;
 }
 
 .logo-container {
   display: flex;
   align-items: center;
+  margin-right: 2rem;
 }
 
 .logo {
@@ -24,15 +26,30 @@
   font-weight: 600;
 }
 
+/* Position nav to start right after logo, not at the end */
+.main-nav {
+  flex: 1;
+  display: flex;
+  justify-content: flex-start; /* Changed from default */
+}
+
 .main-nav ul {
   display: flex;
   list-style: none;
   margin: 0;
   padding: 0;
+  /* Align with sidebar edge - adjust this value to match your sidebar width */
+  margin-left: calc(
+    300px - 2rem - 200px
+  ); /* 300px sidebar - 2rem padding - logo width */
 }
 
 .main-nav li {
   margin: 0 0.5rem;
+}
+
+.main-nav li:first-child {
+  margin-left: 0; /* Remove left margin from first item */
 }
 
 .main-nav a {
