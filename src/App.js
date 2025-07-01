@@ -13,6 +13,7 @@ import {
   useNurseSelection,
 } from "./contexts/NurseSelectionContext";
 import "./App.css";
+import MapWithNurses from "./components/maps/MapWithNurses";
 
 // Create a wrapper component for the map that uses the context
 const MapWithNurseData = () => {
@@ -48,7 +49,7 @@ function App() {
             <Route path="/nurses" element={<NurseList />} />
             <Route path="/patients" element={<PatientList />} />
             <Route path="/appointments" element={<AppointmentList />} />
-            <Route path="/map" element={<MapWithNurseData />} />
+            <Route path="/map" element={<MapWithNurses />} />
             <Route path="/routes" element={<RouteOptimizer />} />
             <Route path="/nurse-map" element={<NurseLocationMap />} />
           </Routes>
