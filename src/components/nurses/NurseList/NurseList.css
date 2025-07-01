@@ -1,0 +1,352 @@
+.nurse-list {
+  padding: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  background-color: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.list-header h2 {
+  margin: 0;
+  color: #333;
+  font-size: 1.8rem;
+}
+
+.header-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.date-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.date-selector label {
+  font-weight: 500;
+  color: #555;
+}
+
+.date-input {
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.add-button {
+  padding: 0.6rem 1.2rem;
+  background-color: #0078d4;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.add-button:hover {
+  background-color: #006abb;
+}
+
+/* Error Banner */
+.error-banner {
+  background-color: #fee;
+  border: 1px solid #fcc;
+  border-radius: 4px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.error-banner p {
+  margin: 0;
+  color: #c00;
+}
+
+.error-dismiss {
+  background: none;
+  border: none;
+  color: #c00;
+  cursor: pointer;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+/* Stats Summary */
+.stats-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.stat-card {
+  background-color: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  text-align: center;
+}
+
+.stat-card h4 {
+  margin: 0 0 0.5rem 0;
+  color: #666;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.stat-number {
+  display: block;
+  font-size: 2rem;
+  font-weight: 600;
+  color: #0078d4;
+}
+
+/* Nurse Grid */
+.nurse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+/* Nurse Card */
+.nurse-card {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.nurse-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
+}
+
+.nurse-header {
+  background-color: #f8f9fa;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.nurse-header h3 {
+  margin: 0 0 0.25rem 0;
+  color: #333;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.nurse-id {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.nurse-info {
+  padding: 1.25rem;
+}
+
+.appointment-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.stat-item {
+  margin: 0;
+  color: #555;
+  font-size: 0.95rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stat-item strong {
+  color: #333;
+  font-weight: 500;
+}
+
+/* Nurse Actions */
+.nurse-actions {
+  padding: 1rem 1.25rem;
+  background-color: #f8f9fa;
+  border-top: 1px solid #e9ecef;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.view-schedule,
+.edit-button {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.view-schedule {
+  background-color: #0078d4;
+  color: white;
+}
+
+.view-schedule:hover:not(:disabled) {
+  background-color: #006abb;
+}
+
+.view-schedule:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.edit-button {
+  background-color: white;
+  color: #333;
+  border: 1px solid #ddd;
+}
+
+.edit-button:hover {
+  background-color: #f0f0f0;
+  border-color: #ccc;
+}
+
+/* No Data State */
+.no-data {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 3rem;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.no-data p {
+  color: #666;
+  margin-bottom: 1.5rem;
+}
+
+.retry-button {
+  padding: 0.6rem 1.5rem;
+  background-color: #0078d4;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.retry-button:hover {
+  background-color: #006abb;
+}
+
+/* Top Nurses Section */
+.top-nurses-section {
+  background-color: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  margin-bottom: 2rem;
+}
+
+.top-nurses-section h3 {
+  margin: 0 0 1rem 0;
+  color: #333;
+  font-size: 1.2rem;
+}
+
+.top-nurses-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.top-nurse-item {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.rank {
+  font-weight: 600;
+  color: #0078d4;
+  margin-right: 1rem;
+  min-width: 30px;
+}
+
+.nurse-name {
+  flex: 1;
+  color: #333;
+  font-weight: 500;
+}
+
+.appointment-count {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+/* List Footer */
+.list-footer {
+  text-align: center;
+  padding: 1.5rem;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.list-footer p {
+  margin: 0.25rem 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+/* Loading State */
+.loading {
+  text-align: center;
+  padding: 3rem;
+  color: #666;
+  font-style: italic;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .nurse-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .header-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .list-header {
+    flex-direction: column;
+    gap: 1rem;
+  }
+}

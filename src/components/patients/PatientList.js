@@ -9,13 +9,13 @@ const PatientList = () => {
   const [nurses, setNurses] = useState([]);
   const [stats, setStats] = useState(null);
 
-  const { 
-    loading, 
-    error, 
-    getFilterOptions, 
+  const {
+    loading,
+    error,
+    getFilterOptions,
     getAppointments,
     getStats,
-    clearError 
+    clearError,
   } = useAPIClient();
 
   // Load patients and nurses on component mount
@@ -23,14 +23,14 @@ const PatientList = () => {
     const loadData = async () => {
       try {
         clearError();
-        
+
         // Load filter options (includes patients and nurses)
         const options = await getFilterOptions();
-        
+
         if (options?.patients) {
           setPatients(options.patients);
         }
-        
+
         if (options?.nurses) {
           setNurses(options.nurses);
         }
@@ -38,7 +38,6 @@ const PatientList = () => {
         // Load stats for additional insights
         const statsData = await getStats();
         setStats(statsData);
-
       } catch (err) {
         console.error("Error loading data:", err);
       }
@@ -49,9 +48,10 @@ const PatientList = () => {
 
   // Filter patients based on search term and nurse assignment
   const filteredPatients = patients.filter((patient) => {
-    const matchesSearch = patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         patient.id.toLowerCase().includes(searchTerm.toLowerCase());
-    
+    const matchesSearch =
+      patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      patient.id.toLowerCase().includes(searchTerm.toLowerCase());
+
     // Note: We don't have nurse assignment data in the current patient structure
     // This would need to be added to the backend if needed
     return matchesSearch;
@@ -61,26 +61,23 @@ const PatientList = () => {
   const handleViewPatient = async (patientId, patientName) => {
     try {
       const data = await getAppointments({
-        patients: patientId
+        patients: patientId,
       });
 
       const appointmentCount = data.appointments?.length || 0;
-      alert(`${patientName} has ${appointmentCount} appointments in the system`);
-      
+      alert(
+        `${patientName} has ${appointmentCount} appointments in the system`
+      );
+
       // TODO: Open detailed patient view modal/page
-      console.log('Patient appointments:', data.appointments);
+      console.log("Patient appointments:", data.appointments);
     } catch (err) {
-      console.error('Error fetching patient appointments:', err);
+      console.error("Error fetching patient appointments:", err);
     }
   };
 
-  const handleEditPatient = (patientId) => {
-    console.log('Edit patient:', patientId);
-    // TODO: Open edit patient form
-  };
-
   const handleAddPatient = () => {
-    console.log('Add new patient');
+    console.log("Add new patient");
     // TODO: Open add patient form
   };
 
@@ -107,7 +104,9 @@ const PatientList = () => {
       {error && (
         <div className="error-banner">
           <p>⚠️ Error: {error}</p>
-          <button onClick={clearError} className="error-dismiss">×</button>
+          <button onClick={clearError} className="error-dismiss">
+            ×
+          </button>
         </div>
       )}
 
@@ -143,7 +142,7 @@ const PatientList = () => {
           onChange={(e) => setSelectedNurse(e.target.value)}
         >
           <option value="">All Nurses</option>
-          {nurses.map(nurse => (
+          {nurses.map((nurse) => (
             <option key={nurse.id} value={nurse.id}>
               {nurse.name}
             </option>
@@ -159,7 +158,10 @@ const PatientList = () => {
               : "No patients match your search criteria. Try adjusting your filters."}
           </p>
           {patients.length === 0 && (
-            <button onClick={() => window.location.reload()} className="retry-button">
+            <button
+              onClick={() => window.location.reload()}
+              className="retry-button"
+            >
               🔄 Retry
             </button>
           )}
@@ -193,23 +195,17 @@ const PatientList = () => {
                     </span>
                   </td>
                   <td>
-                    <span className="status-badge active">
-                      Active
-                    </span>
+                    <span className="status-badge active">Active</span>
                   </td>
                   <td className="actions">
-                    <button 
+                    <button
                       className="action-button view"
-                      onClick={() => handleViewPatient(patient.id, patient.name)}
+                      onClick={() =>
+                        handleViewPatient(patient.id, patient.name)
+                      }
                       disabled={loading}
                     >
                       👁️ View
-                    </button>
-                    <button 
-                      className="action-button edit"
-                      onClick={() => handleEditPatient(patient.id)}
-                    >
-                      ✏️ Edit
                     </button>
                   </td>
                 </tr>
@@ -221,13 +217,11 @@ const PatientList = () => {
 
       <div className="list-footer">
         <p>
-          Showing {filteredPatients.length} of {patients.length} patients • 
-          Last updated: {new Date().toLocaleTimeString()}
+          Showing {filteredPatients.length} of {patients.length} patients • Last
+          updated: {new Date().toLocaleTimeString()}
         </p>
         {stats && (
-          <p>
-            System total: {stats.total} appointments across all patients
-          </p>
+          <p>System total: {stats.total} appointments across all patients</p>
         )}
       </div>
     </div>

@@ -14,6 +14,14 @@ const Header = () => {
         <ul>
           <li>
             <NavLink
+              to="/map"
+              className={({ isActive }) => (isActive ? "active" : "")}
+            >
+              Map
+            </NavLink>
+          </li>
+          <li>
+            <NavLink
               to="/"
               className={({ isActive }) => (isActive ? "active" : "")}
               end
@@ -43,14 +51,6 @@ const Header = () => {
               className={({ isActive }) => (isActive ? "active" : "")}
             >
               Appointments
-            </NavLink>
-          </li>
-          <li>
-            <NavLink
-              to="/map"
-              className={({ isActive }) => (isActive ? "active" : "")}
-            >
-              Map
             </NavLink>
           </li>
           <li>
