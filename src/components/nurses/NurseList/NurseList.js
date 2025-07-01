@@ -6,16 +6,16 @@ const NurseList = () => {
   const [nurses, setNurses] = useState([]);
   const [stats, setStats] = useState(null);
   const [selectedDate, setSelectedDate] = useState(
-    new Date().toISOString().split('T')[0]
+    new Date().toISOString().split("T")[0]
   );
 
-  const { 
-    loading, 
-    error, 
-    getFilterOptions, 
+  const {
+    loading,
+    error,
+    getFilterOptions,
     getStats,
     getAppointments,
-    clearError 
+    clearError,
   } = useAPIClient();
 
   // Load nurses and stats on component mount
@@ -23,7 +23,7 @@ const NurseList = () => {
     const loadData = async () => {
       try {
         clearError();
-        
+
         // Load nurses from filter options
         const options = await getFilterOptions();
         if (options?.nurses) {
@@ -33,7 +33,6 @@ const NurseList = () => {
         // Load overall stats
         const statsData = await getStats();
         setStats(statsData);
-
       } catch (err) {
         console.error("Error loading data:", err);
       }
@@ -48,34 +47,36 @@ const NurseList = () => {
       const data = await getAppointments({
         nurses: nurseId,
         dateFrom: selectedDate,
-        dateTo: selectedDate
+        dateTo: selectedDate,
       });
 
       const appointmentCount = data.appointments?.length || 0;
-      alert(`${nurseName} has ${appointmentCount} appointments on ${selectedDate}`);
-      
+      alert(
+        `${nurseName} has ${appointmentCount} appointments on ${selectedDate}`
+      );
+
       // TODO: Open detailed schedule modal/page
-      console.log('Schedule data:', data.appointments);
+      console.log("Schedule data:", data.appointments);
     } catch (err) {
-      console.error('Error fetching nurse schedule:', err);
+      console.error("Error fetching nurse schedule:", err);
     }
   };
 
   const handleEditNurse = (nurseId) => {
-    console.log('Edit nurse:', nurseId);
+    console.log("Edit nurse:", nurseId);
     // TODO: Open edit nurse form
   };
 
   const handleAddNurse = () => {
-    console.log('Add new nurse');
+    console.log("Add new nurse");
     // TODO: Open add nurse form
   };
 
   // Get nurse stats from overall stats
   const getNurseStats = (nurseId) => {
     if (!stats?.byNurse) return { count: 0 };
-    
-    const nurseStats = stats.byNurse.find(n => n.nurseId === nurseId);
+
+    const nurseStats = stats.byNurse.find((n) => n.nurseId === nurseId);
     return nurseStats || { count: 0 };
   };
 
@@ -107,7 +108,9 @@ const NurseList = () => {
       {error && (
         <div className="error-banner">
           <p>⚠️ Error: {error}</p>
-          <button onClick={clearError} className="error-dismiss">×</button>
+          <button onClick={clearError} className="error-dismiss">
+            ×
+          </button>
         </div>
       )}
 
@@ -124,7 +127,9 @@ const NurseList = () => {
           </div>
           <div className="stat-card">
             <h4>Service Types</h4>
-            <span className="stat-number">{stats.byServiceType?.length || 0}</span>
+            <span className="stat-number">
+              {stats.byServiceType?.length || 0}
+            </span>
           </div>
         </div>
       )}
@@ -133,23 +138,27 @@ const NurseList = () => {
         {nurses.length === 0 ? (
           <div className="no-data">
             <p>
-              No nurses found. Make sure your backend is running and data is synced from HCHB.
+              No nurses found. Make sure your backend is running and data is
+              synced from HCHB.
             </p>
-            <button onClick={() => window.location.reload()} className="retry-button">
+            <button
+              onClick={() => window.location.reload()}
+              className="retry-button"
+            >
               🔄 Retry
             </button>
           </div>
         ) : (
           nurses.map((nurse) => {
             const nurseStats = getNurseStats(nurse.id);
-            
+
             return (
               <div key={nurse.id} className="nurse-card">
                 <div className="nurse-header">
                   <h3>{nurse.name}</h3>
                   <span className="nurse-id">ID: {nurse.id}</span>
                 </div>
-                
+
                 <div className="nurse-info">
                   <div className="appointment-stats">
                     <p className="stat-item">
@@ -162,18 +171,12 @@ const NurseList = () => {
                 </div>
 
                 <div className="nurse-actions">
-                  <button 
+                  <button
                     className="view-schedule"
                     onClick={() => handleViewSchedule(nurse.id, nurse.name)}
                     disabled={loading}
                   >
-                    {loading ? '...' : `📅 Schedule (${selectedDate})`}
-                  </button>
-                  <button 
-                    className="edit-button"
-                    onClick={() => handleEditNurse(nurse.id)}
-                  >
-                    ✏️ Edit
+                    {loading ? "..." : `Schedule (${selectedDate})`}
                   </button>
                 </div>
               </div>
@@ -191,7 +194,9 @@ const NurseList = () => {
               <div key={nurseStats.nurseId} className="top-nurse-item">
                 <span className="rank">#{index + 1}</span>
                 <span className="nurse-name">{nurseStats.nurseName}</span>
-                <span className="appointment-count">{nurseStats.count} appointments</span>
+                <span className="appointment-count">
+                  {nurseStats.count} appointments
+                </span>
               </div>
             ))}
           </div>
@@ -200,14 +205,10 @@ const NurseList = () => {
 
       <div className="list-footer">
         <p>
-          Showing {nurses.length} nurses • 
-          Last updated: {new Date().toLocaleTimeString()}
+          Showing {nurses.length} nurses • Last updated:{" "}
+          {new Date().toLocaleTimeString()}
         </p>
-        {stats && (
-          <p>
-            Total system appointments: {stats.total}
-          </p>
-        )}
+        {stats && <p>Total system appointments: {stats.total}</p>}
       </div>
     </div>
   );
