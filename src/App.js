@@ -2,12 +2,12 @@ import React from "react";
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import SchedulerCalendar from "./components/scheduler/SchedulerCalendar";
-import NurseList from "./components/nurses/NurseList";
+import NurseList from "./components/nurses/NurseList/NurseList";
 import PatientList from "./components/patients/PatientList";
 import AppointmentList from "./components/appointments/AppointmentList";
 import MapView from "./components/maps/MapView";
 import RouteOptimizer from "./components/routes/RouteOptimizer";
-import NurseLocationMap from "./components/nurses/NurseLocationMap";
+import NurseLocationMap from "./components/nurses/NurseLocation/NurseLocationMap";
 import "./App.css";
 
 function App() {

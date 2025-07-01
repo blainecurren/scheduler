@@ -1,7 +1,7 @@
-import React from 'react';
-import Header from './Header';
-import Sidebar from './Sidebar';
-import Footer from './Footer';
+import React from "react";
+import Header from "./Header/Header";
+import Sidebar from "./Sidebar/Sidebar";
+import Footer from "./Footer/Footer";
 
 const Layout = ({ children }) => {
   return (
@@ -9,9 +9,7 @@ const Layout = ({ children }) => {
       <Header />
       <div className="app-container">
         <Sidebar />
-        <main className="app-main">
-          {children}
-        </main>
+        <main className="app-main">{children}</main>
       </div>
       <Footer />
     </div>
