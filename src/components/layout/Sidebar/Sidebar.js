@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import useAPIClient from "../../../hooks/apiClient";
 import "./Sidebar.css";
 
 const Sidebar = () => {
@@ -15,33 +14,165 @@ const Sidebar = () => {
     byNurse: [],
   });
 
-  const { loading, error, getFilterOptions, getStats, clearError } =
-    useAPIClient();
+  // Setup button states
+  const [isSetupRunning, setIsSetupRunning] = useState(false);
+  const [setupStatus, setSetupStatus] = useState("");
+  const [showSetupLogs, setShowSetupLogs] = useState(false);
+  const [setupLogs, setSetupLogs] = useState([]);
+
+  // Loading and error states
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // API helper functions
+  const getFilterOptions = async () => {
+    try {
+      const response = await fetch(
+        "http://localhost:3001/api/appointments/options"
+      );
+      if (!response.ok) throw new Error("Failed to fetch options");
+      return await response.json();
+    } catch (err) {
+      throw err;
+    }
+  };
+
+  const getStats = async () => {
+    try {
+      const response = await fetch(
+        "http://localhost:3001/api/appointments/stats"
+      );
+      if (!response.ok) throw new Error("Failed to fetch stats");
+      return await response.json();
+    } catch (err) {
+      throw err;
+    }
+  };
+
+  const clearError = () => setError(null);
+
+  // Function to load data
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      clearError();
+
+      // Load nurses from filter options
+      const options = await getFilterOptions();
+      if (options?.nurses) {
+        setNurses(options.nurses);
+      }
+
+      // Load overall stats
+      const statsData = await getStats();
+      if (statsData) {
+        setStats(statsData);
+      }
+    } catch (err) {
+      console.error("Error loading sidebar data:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Load nurses and stats on component mount
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        clearError();
-
-        // Load nurses from filter options
-        const options = await getFilterOptions();
-        if (options?.nurses) {
-          setNurses(options.nurses);
-        }
-
-        // Load overall stats
-        const statsData = await getStats();
-        if (statsData) {
-          setStats(statsData);
-        }
-      } catch (err) {
-        console.error("Error loading sidebar data:", err);
-      }
-    };
-
     loadData();
-  }, [getFilterOptions, getStats, clearError]);
+  }, []);
+
+  // Setup functions
+  const addSetupLog = (message, type = "info") => {
+    const timestamp = new Date().toLocaleTimeString();
+    setSetupLogs((prev) => [...prev, { message, type, timestamp }]);
+  };
+
+  const runFullSetup = async () => {
+    setIsSetupRunning(true);
+    setSetupLogs([]);
+    setShowSetupLogs(true);
+
+    try {
+      // Step 1: Sync appointments from HCHB
+      addSetupLog("Starting HCHB appointment sync...", "info");
+      setSetupStatus("Syncing appointments...");
+
+      const syncResponse = await fetch(
+        "http://localhost:3001/api/appointments/sync",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!syncResponse.ok) {
+        throw new Error(`Sync failed: ${syncResponse.statusText}`);
+      }
+
+      const syncResult = await syncResponse.json();
+
+      if (syncResult.success) {
+        addSetupLog(
+          `✅ Synced ${syncResult.appointmentCount} appointments`,
+          "success"
+        );
+      } else {
+        throw new Error(syncResult.error || "Sync failed");
+      }
+
+      // Brief pause between steps
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Step 2: Geocode nurse addresses
+      addSetupLog("Starting nurse address geocoding...", "info");
+      setSetupStatus("Geocoding addresses...");
+
+      const geocodeResponse = await fetch(
+        "http://localhost:3001/api/coordinates/geocode",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!geocodeResponse.ok) {
+        throw new Error(`Geocoding failed: ${geocodeResponse.statusText}`);
+      }
+
+      const geocodeResult = await geocodeResponse.json();
+
+      if (geocodeResult.success) {
+        addSetupLog(
+          `✅ Geocoded ${geocodeResult.data.successCount} addresses`,
+          "success"
+        );
+        if (geocodeResult.data.failedCount > 0) {
+          addSetupLog(
+            `⚠️ Failed to geocode ${geocodeResult.data.failedCount} addresses`,
+            "warning"
+          );
+        }
+      } else {
+        throw new Error(geocodeResult.error || "Geocoding failed");
+      }
+
+      addSetupLog("🎉 Setup complete! Ready for routing.", "success");
+      setSetupStatus("Setup complete!");
+
+      // Reload data after setup
+      await loadData();
+    } catch (err) {
+      console.error("Setup error:", err);
+      addSetupLog(`❌ Error: ${err.message}`, "error");
+      setSetupStatus("Setup failed");
+    } finally {
+      setIsSetupRunning(false);
+    }
+  };
 
   // Calculate statistics for the selected date and nurse
   const calculateStats = () => {
@@ -233,6 +364,38 @@ const Sidebar = () => {
           ) : null}
         </div>
       )}
+
+      {/* System Setup Section */}
+      <div className="sidebar-section">
+        <h3>System Setup</h3>
+        <div className="setup-container">
+          <button
+            className={`btn btn-setup ${isSetupRunning ? "running" : ""}`}
+            onClick={runFullSetup}
+            disabled={isSetupRunning}
+          >
+            {isSetupRunning ? "⏳ Running Setup..." : "🚀 Run Initial Setup"}
+          </button>
+
+          {setupStatus && <div className="setup-status">{setupStatus}</div>}
+
+          {showSetupLogs && setupLogs.length > 0 && (
+            <div className="setup-logs">
+              {setupLogs.map((log, index) => (
+                <div key={index} className={`log-entry log-${log.type}`}>
+                  <span className="log-timestamp">[{log.timestamp}]</span>{" "}
+                  {log.message}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <p className="setup-info">
+            This will sync appointments from HCHB and geocode nurse addresses.
+            Required before route optimization.
+          </p>
+        </div>
+      </div>
     </aside>
   );
 };
