@@ -45,9 +45,17 @@ class APIClient {
     return requestPromise;
   }
 
+  // ===================
+  // HEALTH & GENERAL
+  // ===================
+
   async getHealth() {
     return this.request('/health');
   }
+
+  // ===================
+  // APPOINTMENT ENDPOINTS
+  // ===================
 
   async getFilterOptions() {
     return this.request('/api/appointments/options');
@@ -125,7 +133,61 @@ class APIClient {
   }
 
   async getSyncStatus() {
-    return this.request('/api/appointments/sync-status');
+    return this.request('/api/appointments/sync/status');
+  }
+
+  // ===================
+  // COORDINATES ENDPOINTS
+  // ===================
+
+  async triggerGeocode() {
+    return this.request('/api/coordinates/geocode', {
+      method: 'POST'
+    });
+  }
+
+  async getCoordinatesStatus() {
+    return this.request('/api/coordinates/status');
+  }
+
+  async getCoordinatesStats() {
+    return this.request('/api/coordinates/stats');
+  }
+
+  // ===================
+  // ROUTING ENDPOINTS
+  // ===================
+
+  async optimizeRoute(nurseId, date) {
+    return this.request('/api/routing/optimize-single', {
+      method: 'POST',
+      body: JSON.stringify({ nurseId, date })
+    });
+  }
+
+  async optimizeMultipleRoutes(nurseIds, date) {
+    return this.request('/api/routing/optimize', {
+      method: 'POST',
+      body: JSON.stringify({ nurseIds, date })
+    });
+  }
+
+  async getNurseAppointments(nurseId, date) {
+    return this.request(`/api/routing/appointments/${nurseId}/${date}`);
+  }
+
+  async getRoutingStatus() {
+    return this.request('/api/routing/status');
+  }
+
+  async getNursesWithRoutes(date) {
+    return this.request(`/api/routing/nurses-with-routes/${date}`);
+  }
+
+  async optimizeAllToday() {
+    return this.request('/api/routing/optimize-all-today', {
+      method: 'POST'
+    });
   }
 }
 
@@ -165,7 +227,10 @@ function useAPIClient() {
 
   // Memoize the API functions with stable references
   const memoizedFunctions = useMemo(() => ({
+    // Health & General
     getHealth: (...args) => execute(apiClient.getHealth, ...args),
+    
+    // Appointments
     getFilterOptions: (...args) => execute(apiClient.getFilterOptions, ...args),
     getAppointments: (...args) => execute(apiClient.getAppointments, ...args),
     getMappableAppointments: (...args) => execute(apiClient.getMappableAppointments, ...args),
@@ -173,6 +238,19 @@ function useAPIClient() {
     getStats: (...args) => execute(apiClient.getStats, ...args),
     triggerSync: (...args) => execute(apiClient.triggerSync, ...args),
     getSyncStatus: (...args) => execute(apiClient.getSyncStatus, ...args),
+    
+    // Coordinates
+    triggerGeocode: (...args) => execute(apiClient.triggerGeocode, ...args),
+    getCoordinatesStatus: (...args) => execute(apiClient.getCoordinatesStatus, ...args),
+    getCoordinatesStats: (...args) => execute(apiClient.getCoordinatesStats, ...args),
+    
+    // Routing
+    optimizeRoute: (...args) => execute(apiClient.optimizeRoute, ...args),
+    optimizeMultipleRoutes: (...args) => execute(apiClient.optimizeMultipleRoutes, ...args),
+    getNurseAppointments: (...args) => execute(apiClient.getNurseAppointments, ...args),
+    getRoutingStatus: (...args) => execute(apiClient.getRoutingStatus, ...args),
+    getNursesWithRoutes: (...args) => execute(apiClient.getNursesWithRoutes, ...args),
+    optimizeAllToday: (...args) => execute(apiClient.optimizeAllToday, ...args),
   }), [execute]);
 
   const clearError = useCallback(() => setError(null), []);

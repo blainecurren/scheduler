@@ -19,8 +19,14 @@
     "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
     "frontend": "react-scripts start",
     "backend": "cd backend && npm run server",
+    "backend-dev": "cd backend && npm run dev",
     "backend-sync": "cd backend && npm run sync",
-    "backend-dev": "cd backend && npm run dev"
+    "backend-geocode": "cd backend && npm run coordinates",
+    "backend-sync-and-geocode": "cd backend && npm run sync-and-geocode",
+    "backend-test": "cd backend && node test-api.js",
+    "test-api": "cd backend && node test-api.js",
+    "full-setup": "npm run backend-sync && npm run backend-geocode",
+    "dev-with-logs": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"blue,green\" \"npm run backend\" \"npm run frontend\""
   },
   "eslintConfig": {
     "extends": [
@@ -41,6 +47,7 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
-    "mkdirp": "^3.0.1"
+    "mkdirp": "^3.0.1",
+    "nodemon": "^3.0.1"
   }
 }

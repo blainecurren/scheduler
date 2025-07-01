@@ -1,10 +1,11 @@
 // backend/server.js
-// Express server for HCHB appointment dashboard API
+// Express server for HCHB appointment dashboard API with routing
 
 const express = require('express');
 const cors = require('cors');
 const appointmentRoutes = require('./api/appointments');
-const coordinatesRoutes = require('./api/coordinates');  // ADD THIS LINE
+const coordinatesRoutes = require('./api/coordinates');
+const routingRoutes = require('./api/routing');  // NEW: Add routing API
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -41,7 +42,10 @@ app.use((req, res, next) => {
 app.use('/api/appointments', appointmentRoutes);
 
 // Coordinates API routes
-app.use('/api/coordinates', coordinatesRoutes);  // ADD THIS LINE
+app.use('/api/coordinates', coordinatesRoutes);
+
+// Routing API routes
+app.use('/api/routing', routingRoutes);  // NEW: Add routing endpoints
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -68,10 +72,18 @@ app.get('/', (req, res) => {
         sync: 'POST /api/appointments/sync',
         syncStatus: 'GET /api/appointments/sync/status'
       },
-      coordinates: {  // ADD THIS SECTION
+      coordinates: {
         geocode: 'POST /api/coordinates/geocode',
         status: 'GET /api/coordinates/status',
         stats: 'GET /api/coordinates/stats'
+      },
+      routing: {  // NEW: Document routing endpoints
+        optimize: 'POST /api/routing/optimize',
+        optimizeSingle: 'POST /api/routing/optimize-single',
+        appointments: 'GET /api/routing/appointments/:nurseId/:date',
+        status: 'GET /api/routing/status',
+        nursesWithRoutes: 'GET /api/routing/nurses-with-routes/:date',
+        optimizeAllToday: 'POST /api/routing/optimize-all-today'
       }
     },
     timestamp: new Date().toISOString()
@@ -93,7 +105,7 @@ app.use('*', (req, res) => {
   res.status(404).json({
     error: 'Not found',
     message: `Endpoint ${req.method} ${req.originalUrl} not found`,
-    availableEndpoints: ['/health', '/api/appointments', '/api/coordinates'],  // UPDATE THIS LINE
+    availableEndpoints: ['/health', '/api/appointments', '/api/coordinates', '/api/routing'],  // Updated
     timestamp: new Date().toISOString()
   });
 });
@@ -107,7 +119,8 @@ app.listen(PORT, () => {
   console.log(`📊 API Server: http://localhost:${PORT}`);
   console.log(`🏥 Health Check: http://localhost:${PORT}/health`);
   console.log(`📋 API Endpoints: http://localhost:${PORT}/api/appointments`);
-  console.log(`🗺️  Coordinates API: http://localhost:${PORT}/api/coordinates`);  // ADD THIS LINE
+  console.log(`🗺️  Coordinates API: http://localhost:${PORT}/api/coordinates`);
+  console.log(`🚗 Routing API: http://localhost:${PORT}/api/routing`);  // NEW
   console.log(`⚡ Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log('');
   
@@ -121,10 +134,17 @@ app.listen(PORT, () => {
   console.log('   GET  /api/appointments/stats       - Statistics');
   console.log('   POST /api/appointments/sync        - Trigger sync');
   console.log('   GET  /api/appointments/sync/status - Sync status');
-  console.log('   === COORDINATES ===');  // ADD THIS SECTION
+  console.log('   === COORDINATES ===');
   console.log('   POST /api/coordinates/geocode      - Geocode nurse addresses');
   console.log('   GET  /api/coordinates/status       - Geocoding status');
   console.log('   GET  /api/coordinates/stats        - Coordinate statistics');
+  console.log('   === ROUTING ===');  // NEW
+  console.log('   POST /api/routing/optimize         - Optimize routes for multiple nurses');
+  console.log('   POST /api/routing/optimize-single  - Optimize route for single nurse');
+  console.log('   GET  /api/routing/appointments/:nurseId/:date - Get nurse appointments');
+  console.log('   GET  /api/routing/status           - Routing service status');
+  console.log('   GET  /api/routing/nurses-with-routes/:date - Nurses with routable appointments');
+  console.log('   POST /api/routing/optimize-all-today - Optimize all nurses today');
   console.log('');
 });
 
@@ -138,3 +158,5 @@ process.on('SIGINT', () => {
   console.log('👋 SIGINT received, shutting down gracefully');
   process.exit(0);
 });
+
+module.exports = app;

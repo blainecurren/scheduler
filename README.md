@@ -1,101 +1,98 @@
-# Nurse Scheduler Application
+# HCHB Nurse Scheduler
 
-A React application for optimizing nurse visit schedules using FHIR API, Azure Maps, and GraphHopper routing.
+React application for optimizing nurse visit schedules using HCHB FHIR API, Azure Maps routing, and Leaflet maps.
 
-## Project Overview
+## 🚀 Quick Setup
 
-This application helps healthcare schedulers optimize nurse visit schedules by:
-
-1. Fetching nurse, patient, and appointment data via FHIR API
-2. Geocoding addresses using Azure Maps
-3. Building optimal routes using GraphHopper routing engine
-4. Providing an interactive scheduler interface
-
-## Technology Stack
-
-- **Frontend**: React
-- **API Integration**: FHIR API for healthcare data
-- **Geocoding**: Azure Maps
-- **Route Optimization**: GraphHopper
-- **API Layer**: GraphQL 
-- **Deployment**: Azure Container Apps
-
-## Project Structure
-
-```
-nurse-scheduler/
-├── src/
-│   ├── components/           # React components
-│   │   ├── layout/           # Layout components (Header, Sidebar, etc.)
-│   │   ├── scheduler/        # Scheduler components
-│   │   ├── maps/             # Map visualization components
-│   │   ├── nurses/           # Nurse management components
-│   │   ├── patients/         # Patient management components
-│   │   ├── routes/           # Route optimization components
-│   │   └── appointments/     # Appointment management components
-│   ├── services/             # API services
-│   │   ├── fhir/             # FHIR API service
-│   │   ├── maps/             # Azure Maps service
-│   │   └── routing/          # GraphHopper routing service
-│   ├── utils/                # Utility functions
-│   ├── hooks/                # Custom React hooks
-│   ├── store/                # State management
-│   ├── containers/           # Container components
-│   ├── config/               # Configuration files
-│   ├── assets/               # Static assets
-│   └── types/                # TypeScript type definitions
-├── public/                   # Public assets
-├── infra/                    # Infrastructure as code
-├── Dockerfile                # Docker configuration
-├── docker-compose.yml        # Docker Compose configuration
-└── .env.example              # Environment variables example
-```
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js (v16+)
-- Docker and Docker Compose (for local development with GraphHopper)
-- Azure Maps API key
-- Access to a FHIR server
-
-### Installation
-
-1. Clone the repository
-2. Copy `.env.example` to `.env` and fill in your API keys and URLs
-3. Install dependencies:
-
+### 1. Install Dependencies
 ```bash
 npm install
+cd backend && npm install && cd ..
 ```
 
-4. Start the development server:
+### 2. Environment Configuration
+
+Create `backend/.env` file:
 
 ```bash
-npm start
+# HCHB FHIR API
+HCHB_CLIENT_ID=your_client_id_here
+HCHB_RESOURCE_SECURITY_ID=your_resource_security_id_here
+HCHB_AGENCY_SECRET=your_agency_secret_here
+HCHB_TOKEN_URL=https://your-hchb-token-endpoint.com/token
+HCHB_API_BASE_URL=https://your-hchb-api-endpoint.com
+
+# Azure Maps
+AZURE_MAPS_KEY=your_azure_maps_subscription_key_here
+
+# Optional
+PORT=3001
+DATABASE_PATH=./nurse-scheduler.db
 ```
 
-### Using Docker
+### 3. Initial Setup
+```bash
+# Sync appointments from HCHB and geocode nurse addresses
+npm run full-setup
+```
 
-To run the full application stack with GraphHopper and GraphQL:
+### 4. Start Development
+```bash
+# Start both frontend and backend
+npm run dev
+```
+
+Visit: `http://localhost:3000` (Frontend) and `http://localhost:3001` (Backend API)
+
+## 📋 Available Scripts
 
 ```bash
-docker-compose up
+npm run dev                     # Start frontend + backend
+npm run full-setup              # Sync appointments + geocode addresses
+npm run backend-sync            # Sync appointments from HCHB
+npm run backend-geocode         # Geocode nurse addresses
+npm run test-api               # Test all API endpoints
 ```
 
-## Deployment
+## 🗺️ API Endpoints
 
-The application is designed to be deployed to Azure Container Apps.
+**Base URL**: `http://localhost:3001`
 
-1. Build and push the Docker image
-2. Deploy using the Azure CLI or Azure Portal
-3. Configure environment variables in the Azure Container Apps configuration
+### Health
+- `GET /health` - Server status
 
-## License
+### Appointments
+- `GET /api/appointments/options` - Filter options
+- `GET /api/appointments/filter` - Filter appointments
+- `GET /api/appointments/mappable` - Mappable appointments
+- `GET /api/appointments/calendar` - Calendar view
+- `GET /api/appointments/stats` - Statistics
+- `POST /api/appointments/sync` - Trigger HCHB sync
+- `GET /api/appointments/sync/status` - Sync status
 
-[MIT](LICENSE)
+### Coordinates
+- `POST /api/coordinates/geocode` - Geocode nurse addresses
+- `GET /api/coordinates/status` - Geocoding status
+- `GET /api/coordinates/stats` - Coordinate statistics
 
----
+### Routing
+- `POST /api/routing/optimize` - Optimize multiple nurse routes
+- `POST /api/routing/optimize-single` - Optimize single nurse route
+- `GET /api/routing/appointments/:nurseId/:date` - Get nurse appointments
+- `GET /api/routing/status` - Routing service status
+- `GET /api/routing/nurses-with-routes/:date` - Available nurses for date
+- `POST /api/routing/optimize-all-today` - Optimize all nurses today
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+## 🧪 Testing
+
+```bash
+# Test all endpoints
+npm run backend/test-api
+```
+
+## 🏗️ Tech Stack
+
+- **Frontend**: React, Leaflet Maps, OpenStreetMap
+- **Backend**: Node.js, Express, SQLite
+- **APIs**: HCHB FHIR, Azure Maps
+- **Cost**: ~$30/month (Azure Maps only, free map rendering)
