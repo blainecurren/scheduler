@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
+import { useNurseSelection } from "../../../contexts/NurseSelectionContext";
 import "./Sidebar.css";
 
 const Sidebar = () => {
+  const { updateSelectedNurses, updateSelectedDate } = useNurseSelection();
   const [nurses, setNurses] = useState([]);
   const [selectedNurses, setSelectedNurses] = useState([]);
   const [showNurseDropdown, setShowNurseDropdown] = useState(false);
@@ -237,9 +239,9 @@ const Sidebar = () => {
   };
 
   const handleApplyFilters = () => {
-    // Emit an event or call a callback to update the main view
-    // This would typically be handled by a state management solution
-    // or passed as a prop from the parent component
+    updateSelectedNurses(selectedNurses);
+    updateSelectedDate(selectedDate);
+
     console.log("Apply filters:", {
       nurses: selectedNurses,
       date: selectedDate,
