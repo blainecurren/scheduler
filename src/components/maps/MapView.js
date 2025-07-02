@@ -1,142 +1,170 @@
-import React, { useState, useEffect } from "react";
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Popup,
-  Polyline,
-  Tooltip,
-} from "react-leaflet";
+import React, { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./MapView.css";
 
-// Fix for Leaflet marker images
-import icon from "leaflet/dist/images/marker-icon.png";
-import iconShadow from "leaflet/dist/images/marker-shadow.png";
-
-const DefaultIcon = L.icon({
-  iconUrl: icon,
-  shadowUrl: iconShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
+// Fix for default markers
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: require("leaflet/dist/images/marker-icon-2x.png"),
+  iconUrl: require("leaflet/dist/images/marker-icon.png"),
+  shadowUrl: require("leaflet/dist/images/marker-shadow.png"),
 });
-
-L.Marker.prototype.options.icon = DefaultIcon;
 
 const MapView = ({
   nurseLocations = [],
   patientLocations = [],
   routes = [],
-  center = { lat: 32.75, lng: -97.03 }, // Default center (DFW area, TX)
-  zoom = 11,
 }) => {
-  // Custom marker colors
-  const nurseIcon = L.icon({
-    ...DefaultIcon.options,
-    iconUrl:
-      "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-  });
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markersRef = useRef([]);
+  const polylinesRef = useRef([]);
 
-  const patientIcon = L.icon({
-    ...DefaultIcon.options,
-    iconUrl:
-      "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-  });
+  // Initialize map
+  useEffect(() => {
+    if (!mapRef.current || mapInstanceRef.current) return;
+
+    // Create map instance centered on Texas
+    mapInstanceRef.current = L.map(mapRef.current).setView(
+      [32.7767, -96.797],
+      10
+    );
+
+    // Add tile layer
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap contributors",
+    }).addTo(mapInstanceRef.current);
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, []);
+
+  // Update markers and routes
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+
+    // Clear existing markers and polylines
+    markersRef.current.forEach((marker) => marker.remove());
+    markersRef.current = [];
+    polylinesRef.current.forEach((polyline) => polyline.remove());
+    polylinesRef.current = [];
+
+    // Add nurse markers
+    nurseLocations.forEach((nurse) => {
+      const nurseIcon = L.divIcon({
+        className: "nurse-marker",
+        html: `<div class="marker-content">
+                 <div class="marker-icon">👩‍⚕️</div>
+                 <div class="marker-label">Nurse</div>
+               </div>`,
+        iconSize: [40, 50],
+        iconAnchor: [20, 50],
+        popupAnchor: [0, -50],
+      });
+
+      const marker = L.marker([nurse.location.lat, nurse.location.lng], {
+        icon: nurseIcon,
+      }).addTo(mapInstanceRef.current).bindPopup(`
+          <div class="popup-content">
+            <h3>${nurse.name}</h3>
+            <p><strong>${nurse.title}</strong></p>
+            <p>${nurse.address}</p>
+            <p class="marker-type">Start/End Location</p>
+          </div>
+        `);
+
+      markersRef.current.push(marker);
+    });
+
+    // Add patient markers with visit order
+    patientLocations.forEach((patient, index) => {
+      const patientIcon = L.divIcon({
+        className: "patient-marker",
+        html: `<div class="marker-content">
+                 <div class="marker-icon">${
+                   patient.visitOrder || index + 1
+                 }</div>
+                 <div class="marker-label">Visit ${
+                   patient.visitOrder || index + 1
+                 }</div>
+               </div>`,
+        iconSize: [40, 50],
+        iconAnchor: [20, 50],
+        popupAnchor: [0, -50],
+      });
+
+      const marker = L.marker([patient.location.lat, patient.location.lng], {
+        icon: patientIcon,
+      }).addTo(mapInstanceRef.current).bindPopup(`
+          <div class="popup-content">
+            <h3>${patient.name}</h3>
+            <p><strong>Visit ${patient.visitOrder || index + 1}</strong></p>
+            <p>${patient.appointmentTime}</p>
+            <p>${patient.address}</p>
+          </div>
+        `);
+
+      markersRef.current.push(marker);
+    });
+
+    // Add route polylines
+    routes.forEach((route, index) => {
+      if (route.points && route.points.length > 0) {
+        const latlngs = route.points.map((point) => [point.lat, point.lng]);
+
+        const polyline = L.polyline(latlngs, {
+          color: route.color || "#0078d4",
+          weight: 4,
+          opacity: 0.7,
+          smoothFactor: 1,
+        }).addTo(mapInstanceRef.current);
+
+        // Add direction arrows
+        const decorator = L.polylineDecorator(polyline, {
+          patterns: [
+            {
+              offset: "50%",
+              repeat: 100,
+              symbol: L.Symbol.arrowHead({
+                pixelSize: 12,
+                polygon: false,
+                pathOptions: {
+                  stroke: true,
+                  weight: 2,
+                  color: route.color || "#0078d4",
+                },
+              }),
+            },
+          ],
+        }).addTo(mapInstanceRef.current);
+
+        polylinesRef.current.push(polyline);
+        polylinesRef.current.push(decorator);
+      }
+    });
+
+    // Fit map to show all markers and routes
+    if (markersRef.current.length > 0 || routes.length > 0) {
+      const group = new L.featureGroup([
+        ...markersRef.current,
+        ...polylinesRef.current,
+      ]);
+      mapInstanceRef.current.fitBounds(group.getBounds().pad(0.1));
+    }
+  }, [nurseLocations, patientLocations, routes]);
 
   return (
-    <div className="map-container">
-      <MapContainer
-        center={[center.lat, center.lng]}
-        zoom={zoom}
-        style={{ height: "100%", width: "100%" }}
-      >
-        {/* Base map tiles */}
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-
-        {/* Nurse locations */}
-        {nurseLocations.map((nurse, index) => (
-          <Marker
-            key={`nurse-${index}`}
-            position={[nurse.location.lat, nurse.location.lng]}
-            icon={nurseIcon}
-          >
-            {/* Tooltip shows on hover */}
-            <Tooltip
-              permanent={false}
-              direction="top"
-              offset={[0, -20]}
-              opacity={0.9}
-            >
-              <div className="nurse-tooltip">
-                <strong>{nurse.name}</strong>
-                {/* {nurse.title && (
-                  <div className="nurse-title">{nurse.title}</div>
-                )} */}
-              </div>
-            </Tooltip>
-
-            {/* Popup shows on click with full details */}
-            <Popup>
-              <div>
-                <h3>{nurse.name}</h3>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-
-        {/* Patient locations */}
-        {patientLocations.map((patient, index) => (
-          <Marker
-            key={`patient-${index}`}
-            position={[patient.location.lat, patient.location.lng]}
-            icon={patientIcon}
-          >
-            {/* Tooltip shows on hover */}
-            <Tooltip
-              permanent={false}
-              direction="top"
-              offset={[0, -20]}
-              opacity={0.9}
-            >
-              <div className="patient-tooltip">
-                <strong>{patient.name}</strong>
-                <div className="appointment-time">
-                  {patient.appointmentTime}
-                </div>
-              </div>
-            </Tooltip>
-
-            {/* Popup shows on click with full details */}
-            <Popup>
-              <div>
-                <h3>{patient.name}</h3>
-                <p>Appointment: {patient.appointmentTime}</p>
-                <p>{patient.address}</p>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-
-        {/* Routes as polylines */}
-        {routes.map((route, index) => (
-          <Polyline
-            key={`route-${index}`}
-            positions={route.points.map((point) => [point.lat, point.lng])}
-            color="#0078d4"
-            weight={4}
-            opacity={0.7}
-          />
-        ))}
-      </MapContainer>
+    <div
+      ref={mapRef}
+      className="map-container"
+      style={{ height: "100%", width: "100%" }}
+    >
+      {/* Map will be rendered here */}
     </div>
   );
 };

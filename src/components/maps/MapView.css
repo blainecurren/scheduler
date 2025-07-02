@@ -1,137 +1,117 @@
+/* MapView.css */
+
 .map-container {
+  position: relative;
   width: 100%;
   height: 100%;
-  min-height: 600px;
   border-radius: 8px;
   overflow: hidden;
-  position: relative;
 }
 
-/* Override Leaflet default styles */
-.leaflet-container {
-  height: 100%;
-  width: 100%;
+/* Custom marker styles */
+.nurse-marker,
+.patient-marker {
+  background: none;
+  border: none;
 }
 
-.leaflet-popup-content h3 {
-  margin: 0 0 5px;
+.marker-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+}
+
+.marker-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border: 3px solid white;
+}
+
+.nurse-marker .marker-icon {
+  background-color: #0078d4;
+  color: white;
+}
+
+.patient-marker .marker-icon {
+  background-color: #40e0d0;
+  color: #333;
+  font-weight: bold;
   font-size: 16px;
+}
+
+.marker-label {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+  text-shadow: 1px 1px 2px white, -1px -1px 2px white, 1px -1px 2px white,
+    -1px 1px 2px white;
+  white-space: nowrap;
+}
+
+/* Popup styles */
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+}
+
+.popup-content {
+  padding: 8px;
+  min-width: 200px;
+}
+
+.popup-content h3 {
+  margin: 0 0 8px 0;
+  color: #0078d4;
+  font-size: 16px;
+}
+
+.popup-content p {
+  margin: 4px 0;
+  font-size: 14px;
+  color: #555;
+}
+
+.popup-content p strong {
   color: #333;
 }
 
-.leaflet-popup-content p {
-  margin: 2px 0;
-  font-size: 14px;
-  color: #555;
+.marker-type {
+  font-style: italic;
+  color: #888 !important;
+  font-size: 12px !important;
+  margin-top: 8px !important;
 }
 
-/* Controls for zoom, layers, etc */
-.leaflet-control-container .leaflet-top {
-  top: 10px;
-}
-
-.leaflet-control-container .leaflet-left {
-  left: 10px;
-}
-
-/* For route info box */
-.route-info {
+/* Loading and error states */
+.map-loading {
   position: absolute;
-  bottom: 10px;
-  right: 10px;
-  background-color: rgba(255, 255, 255, 0.9);
-  border-radius: 4px;
-  padding: 10px;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   z-index: 1000;
-  max-width: 300px;
 }
 
-.route-info h4 {
-  margin: 0 0 5px;
-  font-size: 14px;
-}
-
-.route-info-item {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-  margin-bottom: 3px;
-}
-
-.route-info-label {
-  font-weight: 500;
-  color: #555;
-}
-
-.route-info-value {
-  font-weight: 600;
-  color: #0078d4;
-}
-
-/* Add these styles to your existing MapView.css file */
-
-/* Tooltip styling */
-.leaflet-tooltip {
-  background-color: rgba(0, 0, 0, 0.85);
-  border: none;
+.map-error {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fee;
+  color: #c00;
+  padding: 12px 20px;
   border-radius: 4px;
-  color: white;
-  font-size: 14px;
-  padding: 6px 10px;
-  white-space: nowrap;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-}
-
-.leaflet-tooltip::before {
-  border-top-color: rgba(0, 0, 0, 0.85);
-}
-
-/* Nurse tooltip specific styling */
-.nurse-tooltip {
-  text-align: center;
-}
-
-.nurse-tooltip strong {
-  display: block;
-  font-size: 14px;
-  margin-bottom: 2px;
-}
-
-.nurse-tooltip .nurse-title {
-  font-size: 12px;
-  opacity: 0.8;
-  font-weight: normal;
-}
-
-/* Patient tooltip specific styling */
-.patient-tooltip {
-  text-align: center;
-}
-
-.patient-tooltip strong {
-  display: block;
-  font-size: 14px;
-  margin-bottom: 2px;
-}
-
-.patient-tooltip .appointment-time {
-  font-size: 12px;
-  opacity: 0.8;
-  font-weight: normal;
-}
-
-/* Make tooltips appear faster on hover */
-.leaflet-container {
-  cursor: crosshair;
-}
-
-.leaflet-marker-icon {
-  cursor: pointer !important;
-}
-
-/* Optional: Style for when hovering over a marker */
-.leaflet-marker-icon:hover {
-  filter: brightness(1.2);
-  transition: filter 0.2s ease;
+  border: 1px solid #fcc;
+  z-index: 1000;
 }
