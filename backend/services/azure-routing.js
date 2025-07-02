@@ -28,7 +28,7 @@ const CONFIG = {
 
 async function getNurseAppointmentsForDay(nurseIds, date) {
   console.log(
-    `📅 Fetching appointments for ${nurseIds.length} nurses on ${date}...`
+    `📅 Fetching BOOKED appointments for ${nurseIds.length} nurses on ${date}...`
   );
 
   try {
@@ -55,7 +55,7 @@ async function getNurseAppointmentsForDay(nurseIds, date) {
         and(
           inArray(appointments.nurseId, nurseIds),
           like(appointments.startDate, `${date}%`),
-          // eq(appointments.status, "booked"), // FILTER FOR BOOKED APPOINTMENTS ONLY
+          eq(appointments.status, "booked"), // ✅ FIXED: Filter for booked appointments only
           isNotNull(appointments.nurseLocationLatitude),
           isNotNull(appointments.nurseLocationLongitude),
           isNotNull(appointments.locationLatitude),
@@ -65,15 +65,25 @@ async function getNurseAppointmentsForDay(nurseIds, date) {
       .orderBy(appointments.startDate);
 
     console.log(
-      `📊 Raw query results: ${nurseAppointments.length} booked appointments found`
+      `📊 Query results: Found ${nurseAppointments.length} BOOKED appointments`
     );
 
-    // Log appointment statuses for debugging
+    // Enhanced debugging - log appointment statuses
     const statusCounts = nurseAppointments.reduce((acc, apt) => {
       acc[apt.status] = (acc[apt.status] || 0) + 1;
       return acc;
     }, {});
     console.log(`📊 Status breakdown:`, statusCounts);
+
+    // Additional validation - ensure all are booked
+    const nonBookedCount = nurseAppointments.filter(
+      (apt) => apt.status !== "booked"
+    ).length;
+    if (nonBookedCount > 0) {
+      console.warn(
+        `⚠️  WARNING: Found ${nonBookedCount} non-booked appointments in results!`
+      );
+    }
 
     // Group by nurse
     const appointmentsByNurse = nurseAppointments.reduce((acc, appointment) => {
@@ -492,6 +502,9 @@ function formatTime(minutes) {
 // MAIN FUNCTIONS
 // ===================
 
+// backend/services/azure-routing.js
+// Enhanced route optimization with proper validation
+
 async function generateOptimalRoutes(nurseIds, date) {
   console.log(
     `🚀 Starting Azure Maps route optimization for ${nurseIds.length} nurses on ${date}...`
@@ -502,30 +515,101 @@ async function generateOptimalRoutes(nurseIds, date) {
   }
 
   try {
-    // Get appointments for all nurses
-    const appointmentsByNurse = await getNurseAppointmentsForDay(
-      nurseIds,
-      date
-    );
+    // Step 1: Validate nurse IDs exist and have coordinates
+    console.log(`🔍 Step 1: Validating nurses and their coordinates...`);
+    const validNurses = await validateNurseCoordinates(nurseIds);
 
-    if (Object.keys(appointmentsByNurse).length === 0) {
+    if (validNurses.length === 0) {
       return {
         success: false,
-        error: "No booked appointments found for the specified nurses and date",
+        error: "No nurses found with valid coordinates for routing",
       };
     }
 
-    // Generate optimized routes for each nurse
-    const routePromises = Object.entries(appointmentsByNurse).map(
-      ([nurseId, data]) => optimizeRoute(data.nurseInfo, data.appointments)
+    if (validNurses.length < nurseIds.length) {
+      const missingNurses = nurseIds.filter((id) => !validNurses.includes(id));
+      console.warn(
+        `⚠️  ${
+          missingNurses.length
+        } nurses missing coordinates: ${missingNurses.join(", ")}`
+      );
+    }
+
+    // Step 2: Get appointments for validated nurses - WITH PROPER AWAIT
+    console.log(
+      `📅 Step 2: Fetching BOOKED appointments for validated nurses...`
+    );
+    const appointmentsByNurse = await getNurseAppointmentsForDay(
+      validNurses,
+      date
     );
 
-    console.log(`⚡ Processing ${routePromises.length} nurses...`);
+    // Step 3: Validate appointment data before proceeding
+    console.log(`✅ Step 3: Validating appointment data...`);
+    const nursesWithAppointments = Object.keys(appointmentsByNurse);
+
+    if (nursesWithAppointments.length === 0) {
+      return {
+        success: false,
+        error: `No BOOKED appointments found for any nurses on ${date}. Check that appointments exist and have status='booked'.`,
+      };
+    }
+
+    console.log(`📊 Validation results:`);
+    console.log(`   👩‍⚕️ Nurses requested: ${nurseIds.length}`);
+    console.log(`   ✅ Nurses with coordinates: ${validNurses.length}`);
+    console.log(
+      `   📅 Nurses with booked appointments: ${nursesWithAppointments.length}`
+    );
+
+    // Step 4: Wait for appointment data processing to complete
+    await new Promise((resolve) => setTimeout(resolve, 100)); // Small delay to ensure data is ready
+
+    // Step 5: Generate optimized routes for each nurse
+    console.log(
+      `🗺️  Step 4: Starting Azure Maps optimization for ${nursesWithAppointments.length} nurses...`
+    );
+
+    const routePromises = Object.entries(appointmentsByNurse).map(
+      async ([nurseId, data]) => {
+        console.log(
+          `   🚀 Starting optimization for ${data.nurseInfo.name}...`
+        );
+        const result = await optimizeRoute(data.nurseInfo, data.appointments);
+        console.log(
+          `   ${result.success ? "✅" : "❌"} Completed ${
+            data.nurseInfo.name
+          }: ${result.success ? "Success" : result.error}`
+        );
+        return result;
+      }
+    );
+
+    console.log(
+      `⏳ Processing ${routePromises.length} nurses with Azure Maps...`
+    );
     const routes = await Promise.all(routePromises);
 
-    // Separate successful and failed routes
+    // Step 6: Process results
+    console.log(`📊 Step 5: Processing optimization results...`);
     const successfulRoutes = routes.filter((route) => route.success);
     const failedRoutes = routes.filter((route) => !route.success);
+
+    // Log detailed results
+    console.log(`📈 Optimization Results:`);
+    console.log(
+      `   ✅ Successful routes: ${successfulRoutes.length}/${routes.length}`
+    );
+    console.log(`   ❌ Failed routes: ${failedRoutes.length}/${routes.length}`);
+
+    if (failedRoutes.length > 0) {
+      console.log(`❌ Failed route details:`);
+      failedRoutes.forEach((route) => {
+        console.log(
+          `   - ${route.nurseInfo?.name || "Unknown"}: ${route.error}`
+        );
+      });
+    }
 
     // Calculate overall statistics
     const overallStats = calculateOverallStats(successfulRoutes);
@@ -559,6 +643,39 @@ async function generateOptimalRoutes(nurseIds, date) {
       success: false,
       error: error.message,
     };
+  }
+}
+
+// New helper function to validate nurse coordinates
+async function validateNurseCoordinates(nurseIds) {
+  console.log(`🔍 Validating coordinates for ${nurseIds.length} nurses...`);
+
+  try {
+    const nursesWithCoords = await db
+      .selectDistinct({
+        nurseId: appointments.nurseId,
+        nurseName: appointments.nurseName,
+      })
+      .from(appointments)
+      .where(
+        and(
+          inArray(appointments.nurseId, nurseIds),
+          isNotNull(appointments.nurseLocationLatitude),
+          isNotNull(appointments.nurseLocationLongitude)
+        )
+      );
+
+    const validNurseIds = nursesWithCoords.map((nurse) => nurse.nurseId);
+
+    console.log(`✅ Found ${validNurseIds.length} nurses with coordinates:`);
+    nursesWithCoords.forEach((nurse) => {
+      console.log(`   👩‍⚕️ ${nurse.nurseName} (${nurse.nurseId})`);
+    });
+
+    return validNurseIds;
+  } catch (error) {
+    console.error("❌ Error validating nurse coordinates:", error);
+    throw error;
   }
 }
 
