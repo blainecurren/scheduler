@@ -5,6 +5,7 @@ import {
   Marker,
   Popup,
   Polyline,
+  Tooltip,
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -68,11 +69,25 @@ const MapView = ({
             position={[nurse.location.lat, nurse.location.lng]}
             icon={nurseIcon}
           >
+            {/* Tooltip shows on hover */}
+            <Tooltip
+              permanent={false}
+              direction="top"
+              offset={[0, -20]}
+              opacity={0.9}
+            >
+              <div className="nurse-tooltip">
+                <strong>{nurse.name}</strong>
+                {/* {nurse.title && (
+                  <div className="nurse-title">{nurse.title}</div>
+                )} */}
+              </div>
+            </Tooltip>
+
+            {/* Popup shows on click with full details */}
             <Popup>
               <div>
                 <h3>{nurse.name}</h3>
-                <p>{nurse.title}</p>
-                <p>{nurse.address}</p>
               </div>
             </Popup>
           </Marker>
@@ -85,6 +100,22 @@ const MapView = ({
             position={[patient.location.lat, patient.location.lng]}
             icon={patientIcon}
           >
+            {/* Tooltip shows on hover */}
+            <Tooltip
+              permanent={false}
+              direction="top"
+              offset={[0, -20]}
+              opacity={0.9}
+            >
+              <div className="patient-tooltip">
+                <strong>{patient.name}</strong>
+                <div className="appointment-time">
+                  {patient.appointmentTime}
+                </div>
+              </div>
+            </Tooltip>
+
+            {/* Popup shows on click with full details */}
             <Popup>
               <div>
                 <h3>{patient.name}</h3>

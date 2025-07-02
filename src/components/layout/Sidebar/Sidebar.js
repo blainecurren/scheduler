@@ -3,14 +3,20 @@ import { useNurseSelection } from "../../../contexts/NurseSelectionContext";
 import "./Sidebar.css";
 
 const Sidebar = () => {
-  const { updateSelectedNurses, updateSelectedDate } = useNurseSelection();
+  const { updateSelectedNurses, updateSelectedDate, updateSelectedStatus } =
+    useNurseSelection();
+
+  // Check if updateSelectedStatus is available (for backward compatibility)
+  const hasStatusSupport = typeof updateSelectedStatus === "function";
+
+  // Use today's date as the fixed date
+  const todayDate = new Date().toISOString().split("T")[0];
+
   const [nurses, setNurses] = useState([]);
   const [selectedNurses, setSelectedNurses] = useState([]);
   const [showNurseDropdown, setShowNurseDropdown] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
-  const [routeOption, setRouteOption] = useState("optimized");
+  const [selectedStatus, setSelectedStatus] = useState("booked"); // Default to "booked"
+  const [availableStatuses, setAvailableStatuses] = useState([]);
   const [stats, setStats] = useState({
     total: 0,
     byStatus: {},
@@ -60,26 +66,37 @@ const Sidebar = () => {
       setLoading(true);
       clearError();
 
-      // Load nurses from filter options
+      // Load nurses and statuses from filter options
       const options = await getFilterOptions();
       if (options?.nurses) {
         setNurses(options.nurses);
       }
+      if (options?.statuses) {
+        setAvailableStatuses(options.statuses);
+        // If current selected status is not in available statuses, set to first available or "booked"
+        if (!options.statuses.includes(selectedStatus)) {
+          const defaultStatus = options.statuses.includes("booked")
+            ? "booked"
+            : options.statuses[0] || "booked";
+          setSelectedStatus(defaultStatus);
+          if (hasStatusSupport) {
+            updateSelectedStatus(defaultStatus);
+          }
+        }
+      }
 
       // Load overall stats
       const statsData = await getStats();
-      if (statsData) {
-        setStats(statsData);
-      }
+      setStats(statsData);
     } catch (err) {
-      console.error("Error loading sidebar data:", err);
+      console.error("Error loading data:", err);
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Load nurses and stats on component mount
+  // Load data on mount
   useEffect(() => {
     loadData();
   }, []);
@@ -87,376 +104,261 @@ const Sidebar = () => {
   // Handle nurse selection
   const handleNurseToggle = (nurseId) => {
     setSelectedNurses((prev) => {
-      if (prev.includes(nurseId)) {
-        return prev.filter((id) => id !== nurseId);
-      } else {
-        return [...prev, nurseId];
-      }
+      const updated = prev.includes(nurseId)
+        ? prev.filter((id) => id !== nurseId)
+        : [...prev, nurseId];
+      updateSelectedNurses(updated);
+      return updated;
     });
   };
 
-  const handleSelectAll = () => {
-    if (selectedNurses.length === nurses.length) {
-      setSelectedNurses([]);
-    } else {
-      setSelectedNurses(nurses.map((nurse) => nurse.id));
+  // Handle status change
+  const handleStatusChange = (e) => {
+    const newStatus = e.target.value;
+    setSelectedStatus(newStatus);
+    if (hasStatusSupport) {
+      updateSelectedStatus(newStatus);
     }
   };
 
-  const getSelectedNursesText = () => {
-    if (selectedNurses.length === 0) return "Select Nurses";
-    if (selectedNurses.length === 1) {
-      const nurse = nurses.find((n) => n.id === selectedNurses[0]);
-      return nurse ? nurse.name : "1 nurse selected";
+  // Generate routes
+  const handleGenerateRoutes = async () => {
+    if (selectedNurses.length === 0) {
+      alert("Please select at least one nurse");
+      return;
     }
-    if (selectedNurses.length === nurses.length) return "All nurses selected";
-    return `${selectedNurses.length} nurses selected`;
+
+    try {
+      setLoading(true);
+      const response = await fetch(
+        "http://localhost:3001/api/routing/optimize",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            nurseIds: selectedNurses,
+            date: todayDate, // Always use today's date
+            status: selectedStatus, // Include status filter
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to generate routes");
+      }
+
+      const result = await response.json();
+      console.log("Routes generated:", result);
+      alert(
+        `Successfully generated ${result.successfulRoutes} optimized routes!`
+      );
+    } catch (err) {
+      console.error("Error generating routes:", err);
+      alert("Failed to generate routes. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Setup functions
-  const addSetupLog = (message, type = "info") => {
-    const timestamp = new Date().toLocaleTimeString();
-    setSetupLogs((prev) => [...prev, { message, type, timestamp }]);
-  };
-
-  const runFullSetup = async () => {
+  // Full setup handler
+  const handleFullSetup = async () => {
     setIsSetupRunning(true);
     setSetupLogs([]);
     setShowSetupLogs(true);
 
+    const addLog = (message) => {
+      setSetupLogs((prev) => [
+        ...prev,
+        `${new Date().toLocaleTimeString()}: ${message}`,
+      ]);
+    };
+
     try {
-      // Step 1: Sync appointments from HCHB
-      addSetupLog("Starting HCHB appointment sync...", "info");
+      // Step 1: Sync appointments
+      addLog("Starting appointment sync from HCHB...");
       setSetupStatus("Syncing appointments...");
 
       const syncResponse = await fetch(
         "http://localhost:3001/api/appointments/sync",
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
         }
       );
 
       if (!syncResponse.ok) {
-        throw new Error(`Sync failed: ${syncResponse.statusText}`);
+        throw new Error("Failed to sync appointments");
       }
 
       const syncResult = await syncResponse.json();
+      addLog(
+        `✅ Synced ${syncResult.data?.totalAppointments || 0} appointments`
+      );
 
-      if (syncResult.success) {
-        addSetupLog(
-          `✅ Synced ${syncResult.appointmentCount} appointments`,
-          "success"
-        );
-      } else {
-        throw new Error(syncResult.error || "Sync failed");
-      }
-
-      // Brief pause between steps
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // Step 2: Geocode nurse addresses
-      addSetupLog("Starting nurse address geocoding...", "info");
+      // Step 2: Geocode addresses
+      addLog("Starting geocoding of nurse addresses...");
       setSetupStatus("Geocoding addresses...");
 
       const geocodeResponse = await fetch(
         "http://localhost:3001/api/coordinates/geocode",
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
         }
       );
 
       if (!geocodeResponse.ok) {
-        throw new Error(`Geocoding failed: ${geocodeResponse.statusText}`);
+        throw new Error("Failed to geocode addresses");
       }
 
       const geocodeResult = await geocodeResponse.json();
+      addLog(`✅ Geocoded ${geocodeResult.data?.totalGeocoded || 0} addresses`);
 
-      if (geocodeResult.success) {
-        addSetupLog(
-          `✅ Geocoded ${geocodeResult.data.successCount} addresses`,
-          "success"
-        );
-        if (geocodeResult.data.failedCount > 0) {
-          addSetupLog(
-            `⚠️ Failed to geocode ${geocodeResult.data.failedCount} addresses`,
-            "warning"
-          );
-        }
-      } else {
-        throw new Error(geocodeResult.error || "Geocoding failed");
-      }
+      // Step 3: Reload data
+      addLog("Reloading filter options and stats...");
+      setSetupStatus("Loading updated data...");
+      await loadData();
 
-      addSetupLog("🎉 Setup complete! Ready for routing.", "success");
+      addLog("✅ Setup completed successfully!");
       setSetupStatus("Setup complete!");
 
-      // Reload data after setup
-      await loadData();
-    } catch (err) {
-      console.error("Setup error:", err);
-      addSetupLog(`❌ Error: ${err.message}`, "error");
+      setTimeout(() => {
+        setSetupStatus("");
+      }, 3000);
+    } catch (error) {
+      console.error("Setup error:", error);
+      addLog(`❌ Error: ${error.message}`);
       setSetupStatus("Setup failed");
     } finally {
       setIsSetupRunning(false);
     }
   };
 
-  // Calculate statistics for the selected date and nurses
-  const calculateStats = () => {
-    // Default values
-    let totalVisits = 0;
-    let totalDistance = 0;
-    let estimatedTime = 0;
-
-    // If nurses are selected, show their combined stats
-    if (selectedNurses.length > 0 && stats.byNurse) {
-      selectedNurses.forEach((nurseId) => {
-        const nurseStats = stats.byNurse.find((n) => n.nurseId === nurseId);
-        if (nurseStats) {
-          totalVisits += nurseStats.count || 0;
-        }
-      });
-    } else {
-      // Show total stats for all nurses
-      totalVisits = stats.total || 0;
-    }
-
-    // TODO: These would come from route optimization service
-    // For now, we'll estimate based on visit count
-    totalDistance = (totalVisits * 5.2).toFixed(1); // Estimate 5.2 miles per visit
-    estimatedTime = totalVisits * 45; // Estimate 45 minutes per visit
-
-    return {
-      totalVisits,
-      totalDistance,
-      estimatedTime,
-    };
-  };
-
-  const handleApplyFilters = () => {
-    updateSelectedNurses(selectedNurses);
-    updateSelectedDate(selectedDate);
-
-    console.log("Apply filters:", {
-      nurses: selectedNurses,
-      date: selectedDate,
-      routeOption,
-    });
-
-    // You might want to trigger a refresh of the main content here
-    // by calling a callback prop or using context/state management
-  };
-
-  const handleReset = () => {
-    setSelectedNurses([]);
-    setSelectedDate(new Date().toISOString().split("T")[0]);
-    setRouteOption("optimized");
-  };
-
-  const formatTime = (minutes) => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
-  };
-
-  const { totalVisits, totalDistance, estimatedTime } = calculateStats();
-
   return (
-    <aside className="app-sidebar">
-      <div className="sidebar-section">
-        <h3>Filter Options</h3>
+    <div className="sidebar">
+      <h2>Route Planning</h2>
+      <p className="today-date">
+        Today:{" "}
+        {new Date().toLocaleDateString("en-US", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })}
+      </p>
 
-        {error && (
-          <div className="error-message">
-            <p>⚠️ {error}</p>
-            <button onClick={clearError} className="error-dismiss">
-              ×
-            </button>
-          </div>
-        )}
-
-        <div className="filter-section">
-          <label htmlFor="nurseSelect">Select Nurses:</label>
-          <div className="nurse-multiselect">
-            <button
-              className="multiselect-toggle"
-              onClick={() => setShowNurseDropdown(!showNurseDropdown)}
-              disabled={loading}
-            >
-              <span>{getSelectedNursesText()}</span>
-              <span className="dropdown-arrow">
-                {showNurseDropdown ? "▲" : "▼"}
-              </span>
-            </button>
-
-            {showNurseDropdown && (
-              <div className="multiselect-dropdown">
-                <div className="multiselect-header">
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={
-                        selectedNurses.length === nurses.length &&
-                        nurses.length > 0
-                      }
-                      onChange={handleSelectAll}
-                    />
-                    <span>Select All</span>
-                  </label>
-                </div>
-                <div className="multiselect-list">
-                  {nurses.map((nurse) => (
-                    <label key={nurse.id} className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={selectedNurses.includes(nurse.id)}
-                        onChange={() => handleNurseToggle(nurse.id)}
-                      />
-                      <span>{nurse.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="filter-section">
-          <label htmlFor="dateSelect">Select Date:</label>
-          <input
-            type="date"
-            id="dateSelect"
-            className="date-picker"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-          />
-        </div>
-
-        <div className="filter-section">
-          <label htmlFor="routeSelect">Route Options:</label>
-          <select
-            id="routeSelect"
-            className="select-dropdown"
-            value={routeOption}
-            onChange={(e) => setRouteOption(e.target.value)}
-          >
-            <option value="optimized">Optimized Schedule</option>
-            <option value="fastest">Fastest Route</option>
-            <option value="shortest">Shortest Distance</option>
-          </select>
-        </div>
-
-        <div className="filter-section actions">
-          <button
-            className="btn btn-primary"
-            onClick={handleApplyFilters}
-            disabled={loading}
-          >
-            Apply Filters
-          </button>
-          <button className="btn btn-secondary" onClick={handleReset}>
-            Reset
-          </button>
-        </div>
-      </div>
-
-      <div className="sidebar-section">
-        <h3>Statistics</h3>
-        {loading ? (
-          <div className="loading-stats">Loading stats...</div>
-        ) : (
-          <>
-            <div className="stat-item">
-              <span className="stat-label">Total Visits:</span>
-              <span className="stat-value">{totalVisits}</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Total Distance:</span>
-              <span className="stat-value">{totalDistance} miles</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Estimated Time:</span>
-              <span className="stat-value">{formatTime(estimatedTime)}</span>
-            </div>
-            {selectedNurses.length > 0 && (
-              <div className="stat-item">
-                <span className="stat-label">Selected Nurses:</span>
-                <span className="stat-value">{selectedNurses.length}</span>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Additional stats section */}
-      {stats.total > 0 && (
-        <div className="sidebar-section">
-          <h3>Quick Stats</h3>
-          <div className="stat-item">
-            <span className="stat-label">Total Appointments:</span>
-            <span className="stat-value">{stats.total}</span>
-          </div>
-          {stats.byStatus && Array.isArray(stats.byStatus) ? (
-            <>
-              {stats.byStatus.map((statusItem) => (
-                <div key={statusItem.status} className="stat-item">
-                  <span className="stat-label">{statusItem.status}:</span>
-                  <span className="stat-value">{statusItem.count}</span>
-                </div>
-              ))}
-            </>
-          ) : stats.byStatus && typeof stats.byStatus === "object" ? (
-            <>
-              {Object.entries(stats.byStatus).map(([status, value]) => (
-                <div key={status} className="stat-item">
-                  <span className="stat-label">{status}:</span>
-                  <span className="stat-value">
-                    {typeof value === "object" ? value.count : value}
-                  </span>
-                </div>
-              ))}
-            </>
-          ) : null}
+      {error && (
+        <div className="error-message">
+          <p>{error}</p>
+          <button onClick={clearError}>×</button>
         </div>
       )}
 
-      {/* System Setup Section */}
+      {/* Nurse Selection */}
       <div className="sidebar-section">
-        <h3>System Setup</h3>
-        <div className="setup-container">
+        <h3>Select Nurses ({selectedNurses.length})</h3>
+        <div className="nurse-dropdown">
           <button
-            className={`btn btn-setup ${isSetupRunning ? "running" : ""}`}
-            onClick={runFullSetup}
-            disabled={isSetupRunning}
+            className="dropdown-toggle"
+            onClick={() => setShowNurseDropdown(!showNurseDropdown)}
           >
-            {isSetupRunning ? "⏳ Running Setup..." : "🚀 Run Initial Setup"}
+            {selectedNurses.length === 0
+              ? "Choose nurses..."
+              : `${selectedNurses.length} selected`}
           </button>
-
-          {setupStatus && <div className="setup-status">{setupStatus}</div>}
-
-          {showSetupLogs && setupLogs.length > 0 && (
-            <div className="setup-logs">
-              {setupLogs.map((log, index) => (
-                <div key={index} className={`log-entry log-${log.type}`}>
-                  <span className="log-timestamp">[{log.timestamp}]</span>{" "}
-                  {log.message}
-                </div>
+          {showNurseDropdown && (
+            <div className="dropdown-content">
+              {nurses.map((nurse) => (
+                <label key={nurse.id} className="nurse-option">
+                  <input
+                    type="checkbox"
+                    checked={selectedNurses.includes(nurse.id)}
+                    onChange={() => handleNurseToggle(nurse.id)}
+                  />
+                  <span>{nurse.name}</span>
+                </label>
               ))}
             </div>
           )}
-
-          <p className="setup-info">
-            This will sync appointments from HCHB and geocode nurse addresses.
-            Required before route optimization.
-          </p>
         </div>
       </div>
-    </aside>
+
+      {/* Status Filter */}
+      <div className="sidebar-section">
+        <h3>Appointment Status</h3>
+        <select
+          value={selectedStatus}
+          onChange={handleStatusChange}
+          className="status-select"
+        >
+          {availableStatuses.length > 0 ? (
+            availableStatuses.map((status) => (
+              <option key={status} value={status}>
+                {status.charAt(0).toUpperCase() + status.slice(1)}
+              </option>
+            ))
+          ) : (
+            <option value="booked">Booked</option>
+          )}
+        </select>
+      </div>
+
+      {/* Generate Routes Button */}
+      <button
+        className={`generate-btn ${loading ? "loading" : ""}`}
+        onClick={handleGenerateRoutes}
+        disabled={loading || selectedNurses.length === 0}
+      >
+        {loading ? "Generating..." : "Generate Optimized Routes"}
+      </button>
+
+      {/* Stats Section */}
+      <div className="sidebar-section stats-section">
+        <h3>Statistics</h3>
+        <div className="stats">
+          <div className="stat-item">
+            <span className="stat-label">Total Appointments:</span>
+            <span className="stat-value">{stats.total || 0}</span>
+          </div>
+          {stats.byStatus &&
+            Array.isArray(stats.byStatus) &&
+            stats.byStatus.map((item) => (
+              <div key={item.status} className="stat-item">
+                <span className="stat-label">{item.status || "Unknown"}:</span>
+                <span className="stat-value">{item.count || 0}</span>
+              </div>
+            ))}
+        </div>
+      </div>
+
+      {/* Setup Section */}
+      <div className="sidebar-section setup-section">
+        <h3>Setup & Sync</h3>
+        <button
+          className="setup-btn"
+          onClick={handleFullSetup}
+          disabled={isSetupRunning}
+        >
+          {isSetupRunning ? setupStatus : "Run Full Setup"}
+        </button>
+
+        {showSetupLogs && (
+          <div className="setup-logs">
+            <div className="logs-header">
+              <span>Setup Logs</span>
+              <button onClick={() => setShowSetupLogs(false)}>×</button>
+            </div>
+            <div className="logs-content">
+              {setupLogs.map((log, index) => (
+                <div key={index} className="log-entry">
+                  {log}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 

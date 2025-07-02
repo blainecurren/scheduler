@@ -42,7 +42,7 @@
   background-color: rgba(255, 255, 255, 0.9);
   border-radius: 4px;
   padding: 10px;
-  box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
   z-index: 1000;
   max-width: 300px;
 }
@@ -67,4 +67,71 @@
 .route-info-value {
   font-weight: 600;
   color: #0078d4;
+}
+
+/* Add these styles to your existing MapView.css file */
+
+/* Tooltip styling */
+.leaflet-tooltip {
+  background-color: rgba(0, 0, 0, 0.85);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  font-size: 14px;
+  padding: 6px 10px;
+  white-space: nowrap;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.leaflet-tooltip::before {
+  border-top-color: rgba(0, 0, 0, 0.85);
+}
+
+/* Nurse tooltip specific styling */
+.nurse-tooltip {
+  text-align: center;
+}
+
+.nurse-tooltip strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.nurse-tooltip .nurse-title {
+  font-size: 12px;
+  opacity: 0.8;
+  font-weight: normal;
+}
+
+/* Patient tooltip specific styling */
+.patient-tooltip {
+  text-align: center;
+}
+
+.patient-tooltip strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.patient-tooltip .appointment-time {
+  font-size: 12px;
+  opacity: 0.8;
+  font-weight: normal;
+}
+
+/* Make tooltips appear faster on hover */
+.leaflet-container {
+  cursor: crosshair;
+}
+
+.leaflet-marker-icon {
+  cursor: pointer !important;
+}
+
+/* Optional: Style for when hovering over a marker */
+.leaflet-marker-icon:hover {
+  filter: brightness(1.2);
+  transition: filter 0.2s ease;
 }

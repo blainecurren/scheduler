@@ -1,5 +1,5 @@
 // src/contexts/NurseSelectionContext.js
-import React, { createContext, useState, useContext } from "react";
+import React, { createContext, useState, useContext, useEffect } from "react";
 
 const NurseSelectionContext = createContext();
 
@@ -18,6 +18,15 @@ export const NurseSelectionProvider = ({ children }) => {
   const [selectedDate, setSelectedDate] = useState(
     new Date().toISOString().split("T")[0]
   );
+  const [selectedStatus, setSelectedStatus] = useState("booked"); // New state for status
+
+  // Ensure date is always today
+  useEffect(() => {
+    const today = new Date().toISOString().split("T")[0];
+    if (selectedDate !== today) {
+      setSelectedDate(today);
+    }
+  }, []);
 
   const updateSelectedNurses = (nurseIds) => {
     console.log("Context: Updating selected nurses:", nurseIds);
@@ -29,11 +38,18 @@ export const NurseSelectionProvider = ({ children }) => {
     setSelectedDate(date);
   };
 
+  const updateSelectedStatus = (status) => {
+    console.log("Context: Updating selected status:", status);
+    setSelectedStatus(status);
+  };
+
   const value = {
     selectedNurses,
     selectedDate,
+    selectedStatus,
     updateSelectedNurses,
     updateSelectedDate,
+    updateSelectedStatus,
   };
 
   return (
