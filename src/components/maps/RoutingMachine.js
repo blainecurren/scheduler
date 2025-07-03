@@ -12,7 +12,7 @@ const createRoutineMachineLayer = (props) => {
     showAlternatives = false,
     fitSelectedRoutes = true,
     show = false,
-    addWaypoints = false,
+    addWaypoints = true,
     routeWhileDragging = false,
     draggableWaypoints = false,
     createMarker = null,
