@@ -1,170 +1,201 @@
-import React, { useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import RoutingMachine from "./RoutingMachine";
 import "./MapView.css";
 
 // Fix for default markers
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: require("leaflet/dist/images/marker-icon-2x.png"),
-  iconUrl: require("leaflet/dist/images/marker-icon.png"),
-  shadowUrl: require("leaflet/dist/images/marker-shadow.png"),
+  iconRetinaUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+  iconUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+  shadowUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+});
+
+// Custom icons for nurses and patients
+const nurseIcon = L.divIcon({
+  className: "nurse-marker",
+  html: `
+    <div class="marker-content">
+      <div class="marker-icon">👤</div>
+      <div class="marker-label">Nurse</div>
+    </div>
+  `,
+  iconSize: [60, 60],
+  iconAnchor: [30, 50],
+  popupAnchor: [0, -40],
+});
+
+const patientIcon = L.divIcon({
+  className: "patient-marker",
+  html: `
+    <div class="marker-content">
+      <div class="marker-icon">P</div>
+      <div class="marker-label">Patient</div>
+    </div>
+  `,
+  iconSize: [60, 60],
+  iconAnchor: [30, 50],
+  popupAnchor: [0, -40],
 });
 
 const MapView = ({
   nurseLocations = [],
   patientLocations = [],
   routes = [],
+  center = [32.7767, -96.797], // Default to Dallas, TX
+  zoom = 10,
 }) => {
-  const mapRef = useRef(null);
-  const mapInstanceRef = useRef(null);
-  const markersRef = useRef([]);
-  const polylinesRef = useRef([]);
-
-  // Initialize map
-  useEffect(() => {
-    if (!mapRef.current || mapInstanceRef.current) return;
-
-    // Create map instance centered on Texas
-    mapInstanceRef.current = L.map(mapRef.current).setView(
-      [32.7767, -96.797],
-      10
-    );
-
-    // Add tile layer
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "© OpenStreetMap contributors",
-    }).addTo(mapInstanceRef.current);
-
-    return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-      }
-    };
-  }, []);
-
-  // Update markers and routes
-  useEffect(() => {
-    if (!mapInstanceRef.current) return;
-
-    // Clear existing markers and polylines
-    markersRef.current.forEach((marker) => marker.remove());
-    markersRef.current = [];
-    polylinesRef.current.forEach((polyline) => polyline.remove());
-    polylinesRef.current = [];
-
-    // Add nurse markers
-    nurseLocations.forEach((nurse) => {
-      const nurseIcon = L.divIcon({
-        className: "nurse-marker",
-        html: `<div class="marker-content">
-                 <div class="marker-icon">👩‍⚕️</div>
-                 <div class="marker-label">Nurse</div>
-               </div>`,
-        iconSize: [40, 50],
-        iconAnchor: [20, 50],
-        popupAnchor: [0, -50],
-      });
-
-      const marker = L.marker([nurse.location.lat, nurse.location.lng], {
-        icon: nurseIcon,
-      }).addTo(mapInstanceRef.current).bindPopup(`
-          <div class="popup-content">
-            <h3>${nurse.name}</h3>
-            <p><strong>${nurse.title}</strong></p>
-            <p>${nurse.address}</p>
-            <p class="marker-type">Start/End Location</p>
-          </div>
-        `);
-
-      markersRef.current.push(marker);
-    });
-
-    // Add patient markers with visit order
-    patientLocations.forEach((patient, index) => {
-      const patientIcon = L.divIcon({
-        className: "patient-marker",
-        html: `<div class="marker-content">
-                 <div class="marker-icon">${
-                   patient.visitOrder || index + 1
-                 }</div>
-                 <div class="marker-label">Visit ${
-                   patient.visitOrder || index + 1
-                 }</div>
-               </div>`,
-        iconSize: [40, 50],
-        iconAnchor: [20, 50],
-        popupAnchor: [0, -50],
-      });
-
-      const marker = L.marker([patient.location.lat, patient.location.lng], {
-        icon: patientIcon,
-      }).addTo(mapInstanceRef.current).bindPopup(`
-          <div class="popup-content">
-            <h3>${patient.name}</h3>
-            <p><strong>Visit ${patient.visitOrder || index + 1}</strong></p>
-            <p>${patient.appointmentTime}</p>
-            <p>${patient.address}</p>
-          </div>
-        `);
-
-      markersRef.current.push(marker);
-    });
-
-    // Add route polylines
-    routes.forEach((route, index) => {
-      if (route.points && route.points.length > 0) {
-        const latlngs = route.points.map((point) => [point.lat, point.lng]);
-
-        const polyline = L.polyline(latlngs, {
-          color: route.color || "#0078d4",
-          weight: 4,
-          opacity: 0.7,
-          smoothFactor: 1,
-        }).addTo(mapInstanceRef.current);
-
-        // Add direction arrows
-        const decorator = L.polylineDecorator(polyline, {
-          patterns: [
-            {
-              offset: "50%",
-              repeat: 100,
-              symbol: L.Symbol.arrowHead({
-                pixelSize: 12,
-                polygon: false,
-                pathOptions: {
-                  stroke: true,
-                  weight: 2,
-                  color: route.color || "#0078d4",
-                },
-              }),
-            },
-          ],
-        }).addTo(mapInstanceRef.current);
-
-        polylinesRef.current.push(polyline);
-        polylinesRef.current.push(decorator);
-      }
-    });
-
-    // Fit map to show all markers and routes
-    if (markersRef.current.length > 0 || routes.length > 0) {
-      const group = new L.featureGroup([
-        ...markersRef.current,
-        ...polylinesRef.current,
-      ]);
-      mapInstanceRef.current.fitBounds(group.getBounds().pad(0.1));
+  // Handle different data structures for backward compatibility
+  const processedNurseLocations = nurseLocations.map((nurse) => {
+    // If location is nested under 'location' property
+    if (nurse.location) {
+      return {
+        ...nurse,
+        latitude: nurse.location.lat,
+        longitude: nurse.location.lng,
+      };
     }
-  }, [nurseLocations, patientLocations, routes]);
+    // If already has latitude/longitude at top level
+    return nurse;
+  });
+
+  const processedPatientLocations = patientLocations.map((patient) => {
+    // If location is nested under 'location' property
+    if (patient.location) {
+      return {
+        ...patient,
+        latitude: patient.location.lat,
+        longitude: patient.location.lng,
+      };
+    }
+    // If already has latitude/longitude at top level
+    return patient;
+  });
+  const [selectedRoute, setSelectedRoute] = useState(null);
+
+  // Process routes for the routing machine
+  useEffect(() => {
+    if (routes.length > 0 && routes[0].coordinates) {
+      // Convert the first route to waypoints for the routing machine
+      const waypoints = routes[0].coordinates.map((coord) => [
+        coord.lat,
+        coord.lng,
+      ]);
+      setSelectedRoute(waypoints);
+    }
+  }, [routes]);
 
   return (
-    <div
-      ref={mapRef}
-      className="map-container"
-      style={{ height: "100%", width: "100%" }}
-    >
-      {/* Map will be rendered here */}
+    <div className="map-container">
+      <MapContainer
+        center={center}
+        zoom={zoom}
+        style={{ height: "100%", width: "100%" }}
+        doubleClickZoom={false}
+      >
+        <TileLayer
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+          attribution="Tiles &copy; Esri &mdash; Sources: GEBCO, NOAA, CHS, OSU, UNH, CSUMB, National Geographic, DeLorme, NAVTEQ, and Esri"
+        />
+
+        {/* Nurse markers */}
+        {processedNurseLocations.map((nurse) => {
+          if (!nurse.latitude || !nurse.longitude) return null;
+
+          return (
+            <Marker
+              key={nurse.id}
+              position={[nurse.latitude, nurse.longitude]}
+              icon={nurseIcon}
+            >
+              <Popup>
+                <div className="popup-content">
+                  <h3>{nurse.name}</h3>
+                  <p>
+                    <strong>ID:</strong> {nurse.id}
+                  </p>
+                  {nurse.address && (
+                    <p>
+                      <strong>Address:</strong> {nurse.address}
+                    </p>
+                  )}
+                  <p className="marker-type">Nurse Location</p>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+
+        {/* Patient markers */}
+        {processedPatientLocations.map((patient, index) => {
+          if (!patient.latitude || !patient.longitude) return null;
+
+          return (
+            <Marker
+              key={patient.id || `patient-${index}`}
+              position={[patient.latitude, patient.longitude]}
+              icon={patientIcon}
+            >
+              <Popup>
+                <div className="popup-content">
+                  <h3>{patient.name || `Patient ${index + 1}`}</h3>
+                  {patient.address && (
+                    <p>
+                      <strong>Address:</strong> {patient.address}
+                    </p>
+                  )}
+                  {patient.appointmentTime && (
+                    <p>
+                      <strong>Appointment:</strong> {patient.appointmentTime}
+                    </p>
+                  )}
+                  <p className="marker-type">Patient Location</p>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+
+        {/* Routing Machine for displaying routes */}
+        {routes &&
+          routes.length > 0 &&
+          routes.map((route, index) => {
+            // Extract waypoints from route points
+            const waypoints =
+              route.points && route.points.length >= 2
+                ? route.points.map((point) => [point.lat, point.lng])
+                : null;
+
+            if (!waypoints) return null;
+
+            return (
+              <RoutingMachine
+                key={route.id || `route-${index}`}
+                waypoints={waypoints}
+                lineOptions={{
+                  styles: [
+                    {
+                      color: route.color || "#0078d4",
+                      weight: 4,
+                      opacity: 0.8,
+                    },
+                  ],
+                }}
+                show={false}
+                addWaypoints={false}
+                routeWhileDragging={false}
+                draggableWaypoints={false}
+                fitSelectedRoutes={false}
+                showAlternatives={false}
+              />
+            );
+          })}
+      </MapContainer>
     </div>
   );
 };

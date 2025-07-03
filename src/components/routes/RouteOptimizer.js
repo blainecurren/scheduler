@@ -389,6 +389,7 @@ const RouteOptimizer = () => {
     if (displayMode === "multiple" && routes.length > 0) {
       console.log("Multiple routes polylines processing");
       const allPolylines = [];
+
       routes
         .filter((route) => route.visible)
         .forEach((route) => {

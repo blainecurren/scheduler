@@ -115,3 +115,22 @@
   border: 1px solid #fcc;
   z-index: 1000;
 }
+
+/* Hide the leaflet routing container UI */
+.leaflet-control-container .leaflet-routing-container-hide {
+  display: none;
+}
+
+/* Style for the route line */
+.leaflet-routing-container {
+  display: none;
+}
+
+/* Override routing machine default styles */
+.leaflet-routing-alternatives-container {
+  display: none;
+}
+
+.leaflet-routing-geocoders {
+  display: none;
+}

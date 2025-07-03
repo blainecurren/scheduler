@@ -6,14 +6,20 @@ import { useNurseSelection } from "../../contexts/NurseSelectionContext";
 const MapWithNurses = () => {
   const { selectedNurses, selectedDate } = useNurseSelection();
   const [nurseLocations, setNurseLocations] = useState([]);
+  const [patientLocations, setPatientLocations] = useState([]);
+  const [routes, setRoutes] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [routesLoading, setRoutesLoading] = useState(false);
 
   useEffect(() => {
     console.log("MapWithNurses: Selected nurses changed:", selectedNurses);
     if (selectedNurses.length > 0) {
       fetchNurseLocations();
+      fetchRoutes();
     } else {
       setNurseLocations([]);
+      setPatientLocations([]);
+      setRoutes([]);
     }
   }, [selectedNurses, selectedDate]);
 
@@ -34,8 +40,10 @@ const MapWithNurses = () => {
       if (data.appointments) {
         // Extract unique nurse locations
         const nurseMap = {};
+        const patientMap = {};
 
         data.appointments.forEach((apt) => {
+          // Add nurse location
           if (
             apt.nurseId &&
             !nurseMap[apt.nurseId] &&
@@ -52,18 +60,103 @@ const MapWithNurses = () => {
                 lng: parseFloat(apt.nurseLocationLongitude),
               },
             };
-            console.log("Added nurse location:", nurseMap[apt.nurseId]);
+          }
+
+          // Add patient location
+          if (apt.latitude && apt.longitude) {
+            const patientKey = `${apt.patientId}-${apt.startDate}`;
+            if (!patientMap[patientKey]) {
+              patientMap[patientKey] = {
+                id: patientKey,
+                patientId: apt.patientId,
+                name: apt.patientName,
+                address:
+                  apt.locationAddress || apt.locationName || "No address",
+                appointmentTime: new Date(apt.startDate).toLocaleTimeString(
+                  [],
+                  {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }
+                ),
+                location: {
+                  lat: parseFloat(apt.latitude),
+                  lng: parseFloat(apt.longitude),
+                },
+                nurseId: apt.nurseId,
+                nurseName: apt.nurseName,
+              };
+            }
           }
         });
 
         const locations = Object.values(nurseMap);
+        const patients = Object.values(patientMap);
         console.log("Final nurse locations:", locations);
+        console.log("Patient locations:", patients);
         setNurseLocations(locations);
+        setPatientLocations(patients);
       }
     } catch (error) {
       console.error("Error fetching nurse locations:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchRoutes = async () => {
+    if (selectedNurses.length === 0) return;
+
+    setRoutesLoading(true);
+    console.log("Fetching routes for nurses:", selectedNurses);
+
+    try {
+      const response = await fetch(
+        "http://localhost:3001/api/routing/optimize",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            nurseIds: selectedNurses,
+            date: selectedDate,
+          }),
+        }
+      );
+
+      const data = await response.json();
+      console.log("Routes API response:", data);
+
+      if (data.success && data.data?.routes) {
+        const formattedRoutes = [];
+
+        data.data.routes.forEach((routeData) => {
+          if (routeData.leafletData?.polylines) {
+            routeData.leafletData.polylines.forEach((polyline) => {
+              if (polyline.points && polyline.points.length > 0) {
+                formattedRoutes.push({
+                  id: `${routeData.nurseInfo.id}-${polyline.id || 0}`,
+                  nurseId: routeData.nurseInfo.id,
+                  nurseName: routeData.nurseInfo.name,
+                  points: polyline.points.map((point) => ({
+                    lat: point[0],
+                    lng: point[1],
+                  })),
+                  color: polyline.color || "#0078d4",
+                });
+              }
+            });
+          }
+        });
+
+        console.log("Formatted routes:", formattedRoutes);
+        setRoutes(formattedRoutes);
+      }
+    } catch (error) {
+      console.error("Error fetching routes:", error);
+    } finally {
+      setRoutesLoading(false);
     }
   };
 
@@ -76,9 +169,9 @@ const MapWithNurses = () => {
       const avgLng =
         nurseLocations.reduce((sum, n) => sum + n.location.lng, 0) /
         nurseLocations.length;
-      return { lat: avgLat, lng: avgLng };
+      return [avgLat, avgLng];
     }
-    return { lat: 32.75, lng: -97.03 }; // Default
+    return [32.75, -97.03]; // Default to DFW area
   };
 
   if (loading) {
@@ -97,16 +190,26 @@ const MapWithNurses = () => {
           backgroundColor: "#f0f0f0",
           borderBottom: "1px solid #ddd",
           fontSize: "14px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
         }}
       >
-        {selectedNurses.length === 0
-          ? 'Select nurses from the sidebar and click "Apply Filters" to see their locations'
-          : `Showing ${nurseLocations.length} nurse location(s) for ${selectedDate}`}
+        <div>
+          {selectedNurses.length === 0
+            ? 'Select nurses from the sidebar and click "Apply Filters" to see their locations'
+            : `Showing ${nurseLocations.length} nurse(s) and ${patientLocations.length} patient visit(s) for ${selectedDate}`}
+        </div>
+        {routesLoading && (
+          <div style={{ fontSize: "12px", color: "#666" }}>
+            Loading routes...
+          </div>
+        )}
       </div>
       <MapView
         nurseLocations={nurseLocations}
-        patientLocations={[]} // Empty for now
-        routes={[]}
+        patientLocations={patientLocations}
+        routes={routes}
         center={getCenter()}
         zoom={nurseLocations.length > 0 ? 12 : 10}
       />
