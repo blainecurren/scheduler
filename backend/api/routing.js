@@ -114,9 +114,6 @@ router.post("/optimize", async (req, res) => {
         },
       };
 
-      // 🔍 DEBUG: Final API response structure
-      debugRouteData("API_RESPONSE", responseData, "Final Response");
-
       res.json(responseData);
     } else {
       res.status(500).json({
