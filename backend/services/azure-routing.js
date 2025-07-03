@@ -132,6 +132,7 @@ async function optimizeRoute(nurseInfo, appointments) {
     `🗺️  Optimizing route for ${nurseInfo.name} with ${appointments.length} appointments...`
   );
 
+
   if (!CONFIG.azureMapsKey) {
     throw new Error("AZURE_MAPS_KEY environment variable is required");
   }
@@ -709,9 +710,273 @@ function calculateOverallStats(routes) {
   };
 }
 
-// ===================
-// EXPORTS
-// ===================
+// Add this debugging function to your backend/services/azure-routing.js
+// Place it before the module.exports section
+
+function debugRouteData(stage, data, label = "") {
+  console.log(`\n🔍 DEBUG ${stage} ${label}:`);
+  console.log(`📊 Type: ${typeof data}, IsArray: ${Array.isArray(data)}`);
+
+  if (stage === "AZURE_RAW_RESPONSE") {
+    console.log(`📡 Azure Maps Response Structure:`);
+    console.log(`   routes array length: ${data.routes?.length || 0}`);
+    if (data.routes?.[0]) {
+      const route = data.routes[0];
+      console.log(
+        `   summary: lengthInMeters=${route.summary?.lengthInMeters}, travelTimeInSeconds=${route.summary?.travelTimeInSeconds}`
+      );
+      console.log(`   legs count: ${route.legs?.length || 0}`);
+      if (route.legs?.[0]?.points) {
+        console.log(
+          `   first leg points count: ${route.legs[0].points.length}`
+        );
+        console.log(
+          `   sample point: ${JSON.stringify(route.legs[0].points[0])}`
+        );
+      }
+    }
+  } else if (stage === "EXTRACTED_POINTS") {
+    console.log(`📍 Extracted Route Points:`);
+    console.log(`   points array length: ${data.length}`);
+    if (data.length > 0) {
+      console.log(`   first point: [${data[0][0]}, ${data[0][1]}]`);
+      console.log(
+        `   last point: [${data[data.length - 1][0]}, ${
+          data[data.length - 1][1]
+        }]`
+      );
+      console.log(`   sample points: ${JSON.stringify(data.slice(0, 3))}`);
+    }
+  } else if (stage === "ROUTE_SEGMENTS") {
+    console.log(`🛣️  Route Segments Array:`);
+    console.log(`   segments count: ${data.length}`);
+    data.forEach((segment, i) => {
+      console.log(`   segment ${i}: ${segment.from} → ${segment.to}`);
+      console.log(
+        `     success: ${segment.success}, points: ${
+          segment.routePoints?.length || 0
+        }`
+      );
+      if (segment.routePoints?.length > 0) {
+        console.log(
+          `     first point: [${segment.routePoints[0][0]}, ${segment.routePoints[0][1]}]`
+        );
+      }
+    });
+  } else if (stage === "LEAFLET_DATA") {
+    console.log(`🍃 Leaflet Formatted Data:`);
+    console.log(`   markers count: ${data.markers?.length || 0}`);
+    console.log(`   polylines count: ${data.polylines?.length || 0}`);
+
+    if (data.markers) {
+      data.markers.forEach((marker, i) => {
+        console.log(
+          `   marker ${i}: ${marker.type} - ${marker.id} at [${marker.position[0]}, ${marker.position[1]}]`
+        );
+      });
+    }
+
+    if (data.polylines) {
+      data.polylines.forEach((polyline, i) => {
+        console.log(
+          `   polyline ${i}: ${polyline.id}, points: ${
+            polyline.points?.length || 0
+          }, color: ${polyline.color}`
+        );
+        if (polyline.points?.length > 0) {
+          console.log(
+            `     first point: [${polyline.points[0][0]}, ${polyline.points[0][1]}]`
+          );
+        }
+      });
+    }
+  } else if (stage === "FINAL_ROUTE_OBJECT") {
+    console.log(`🎯 Final Route Object Structure:`);
+    console.log(`   success: ${data.success}`);
+    console.log(
+      `   nurseInfo: ${data.nurseInfo?.name} (${data.nurseInfo?.id})`
+    );
+    console.log(`   totalAppointments: ${data.totalAppointments}`);
+    console.log(
+      `   optimizedOrder length: ${data.optimizedOrder?.length || 0}`
+    );
+    console.log(`   routeSegments length: ${data.routeSegments?.length || 0}`);
+    console.log(`   leafletData present: ${!!data.leafletData}`);
+    if (data.leafletData) {
+      console.log(
+        `     leafletData.markers: ${data.leafletData.markers?.length || 0}`
+      );
+      console.log(
+        `     leafletData.polylines: ${data.leafletData.polylines?.length || 0}`
+      );
+    }
+    console.log(
+      `   summary: distance=${data.summary?.totalDistanceMiles}mi, time=${data.summary?.totalTimeMinutes}min`
+    );
+  } else if (stage === "API_RESPONSE") {
+    console.log(`🌐 API Response to Frontend:`);
+    console.log(`   success: ${data.success}`);
+    console.log(`   data.routes length: ${data.data?.routes?.length || 0}`);
+    if (data.data?.routes?.[0]) {
+      const route = data.data.routes[0];
+      console.log(`   route[0].leafletData present: ${!!route.leafletData}`);
+      if (route.leafletData) {
+        console.log(`     markers: ${route.leafletData.markers?.length || 0}`);
+        console.log(
+          `     polylines: ${route.leafletData.polylines?.length || 0}`
+        );
+      }
+    }
+  }
+
+  console.log(`🔍 END DEBUG ${stage}\n`);
+}
+
+// Updated getAzureMapsRoute function with debugging
+async function getAzureMapsRoute(origin, destination, appointment) {
+  try {
+    const params = new URLSearchParams({
+      "api-version": "1.0",
+      "subscription-key": CONFIG.azureMapsKey,
+      query: `${origin.latitude},${origin.longitude}:${destination.latitude},${destination.longitude}`,
+      travelMode: CONFIG.travelMode,
+      routeType: CONFIG.routeType,
+    });
+
+    const response = await axios.get(`${CONFIG.routeApiUrl}?${params}`, {
+      timeout: CONFIG.timeout,
+    });
+
+    // 🔍 DEBUG: Azure raw response
+    debugRouteData(
+      "AZURE_RAW_RESPONSE",
+      response.data,
+      `${origin.name} → ${destination.name}`
+    );
+
+    const route = response.data.routes?.[0];
+    if (!route) {
+      throw new Error("No route found");
+    }
+
+    const summary = route.summary;
+    const distanceMeters = summary.lengthInMeters;
+    const timeSeconds = summary.travelTimeInSeconds;
+
+    // Extract route points for Leaflet polyline
+    const routePoints = extractRoutePoints(route);
+
+    // 🔍 DEBUG: Extracted points
+    debugRouteData(
+      "EXTRACTED_POINTS",
+      routePoints,
+      `${origin.name} → ${destination.name}`
+    );
+
+    return {
+      from: origin.name,
+      to: destination.name,
+      appointment: appointment,
+      distanceMiles: metersToMiles(distanceMeters),
+      timeMinutes: secondsToMinutes(timeSeconds),
+      routePoints: routePoints, // Array of [lat, lng] for Leaflet
+      success: true,
+    };
+  } catch (error) {
+    console.error(
+      `❌ Azure routing failed: ${origin.name} → ${destination.name}:`,
+      error.message
+    );
+    return {
+      from: origin.name,
+      to: destination.name,
+      appointment: appointment,
+      distanceMiles: 0,
+      timeMinutes: 0,
+      routePoints: [],
+      success: false,
+      error: error.message,
+    };
+  }
+}
+
+// Updated optimizeRoute function with debugging
+async function optimizeRoute(nurseInfo, appointments) {
+  console.log(
+    `🗺️  Optimizing route for ${nurseInfo.name} with ${appointments.length} appointments...`
+  );
+
+  if (!CONFIG.azureMapsKey) {
+    throw new Error("AZURE_MAPS_KEY environment variable is required");
+  }
+
+  if (appointments.length === 0) {
+    return {
+      success: false,
+      error: "No appointments to route",
+    };
+  }
+
+  try {
+    // Calculate optimal order using distance matrix
+    console.log(`   🧮 Calculating optimal visit order...`);
+    const optimizedOrder = await calculateOptimalOrder(nurseInfo, appointments);
+
+    console.log(`   🗺️  Getting route segments with distances and times...`);
+    const routeSegments = await getRouteSegments(nurseInfo, optimizedOrder);
+
+    // 🔍 DEBUG: Route segments
+    debugRouteData("ROUTE_SEGMENTS", routeSegments, nurseInfo.name);
+
+    const totalStats = calculateTotalStats(routeSegments);
+
+    // Format for Leaflet frontend
+    console.log(`   🍃 Formatting data for Leaflet...`);
+    const leafletRoute = formatForLeaflet(
+      nurseInfo,
+      optimizedOrder,
+      routeSegments
+    );
+
+    // 🔍 DEBUG: Leaflet formatted data
+    debugRouteData("LEAFLET_DATA", leafletRoute, nurseInfo.name);
+
+    const finalRoute = {
+      success: true,
+      nurseInfo,
+      totalAppointments: appointments.length,
+      originalOrder: appointments,
+      optimizedOrder: optimizedOrder,
+      routeSegments: routeSegments,
+      leafletData: leafletRoute, // Formatted specifically for Leaflet
+      summary: {
+        totalDistanceMiles: totalStats.totalDistanceMiles,
+        totalTimeMinutes: totalStats.totalTimeMinutes,
+        totalTimeFormatted: formatTime(totalStats.totalTimeMinutes),
+        visits: appointments.length,
+        estimatedFuelCost: calculateFuelCost(totalStats.totalDistanceMiles),
+        averageDistancePerVisit:
+          totalStats.totalDistanceMiles / appointments.length,
+        averageTimePerVisit: totalStats.totalTimeMinutes / appointments.length,
+      },
+    };
+
+    // 🔍 DEBUG: Final route object
+    debugRouteData("FINAL_ROUTE_OBJECT", finalRoute, nurseInfo.name);
+
+    return finalRoute;
+  } catch (error) {
+    console.error(
+      `❌ Route optimization failed for ${nurseInfo.name}:`,
+      error.message
+    );
+    return {
+      success: false,
+      error: error.message,
+      nurseInfo,
+    };
+  }
+}
 
 module.exports = {
   generateOptimalRoutes,
